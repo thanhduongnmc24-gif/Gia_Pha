@@ -21,8 +21,9 @@ export default function SettingsScreen() {
   const [timeDay, setTimeDay] = useState(new Date(new Date().setHours(6, 0, 0, 0)));
   const [timeNight, setTimeNight] = useState(new Date(new Date().setHours(18, 0, 0, 0)));
   const [timeOff, setTimeOff] = useState(new Date(new Date().setHours(8, 0, 0, 0)));
-  const [timeNormal, setTimeNormal] = useState(new Date(new Date().setHours(7, 0, 0, 0)));
-  const [pickerMode, setPickerMode] = useState<'none' | 'date' | 'timeDay' | 'timeNight' | 'timeOff' | 'timeNormal'>('none');
+  
+  // [ĐÃ XÓA] timeNormal
+  const [pickerMode, setPickerMode] = useState<'none' | 'date' | 'timeDay' | 'timeNight' | 'timeOff'>('none');
   const [tempDate, setTempDate] = useState(new Date());
 
   // --- STATE AUTH & SYNC (SUPABASE) ---
@@ -57,7 +58,7 @@ export default function SettingsScreen() {
       const tDay = await AsyncStorage.getItem('TIME_DAY'); if (tDay) setTimeDay(new Date(tDay));
       const tNight = await AsyncStorage.getItem('TIME_NIGHT'); if (tNight) setTimeNight(new Date(tNight));
       const tOff = await AsyncStorage.getItem('TIME_OFF'); if (tOff) setTimeOff(new Date(tOff));
-      const tNormal = await AsyncStorage.getItem('TIME_NORMAL'); if (tNormal) setTimeNormal(new Date(tNormal));
+      // [ĐÃ XÓA] Load TIME_NORMAL
     } catch (e) { console.error('Lỗi load settings:', e); }
   };
 
@@ -96,21 +97,18 @@ export default function SettingsScreen() {
     setEmail(''); setPassword('');
   };
 
-  // --- CÁC HÀM XỬ LÝ SYNC (ĐÃ FIX CRASH) ---
+  // --- CÁC HÀM XỬ LÝ SYNC ---
 
-  // Sao lưu lên đám mây (Upload)
   const handleBackup = async () => {
     if (!user) return;
     setIsSyncing(true);
     try {
-      // 1. Gom tất cả dữ liệu local
       const keys = ['QUICK_NOTES', 'CALENDAR_NOTES', 'USER_REMINDERS', 'CYCLE_START_DATE', 'NOTIF_ENABLED', 'GEMINI_API_KEY'];
       const stores = await AsyncStorage.multiGet(keys);
       
       const dataToSave: any = {};
       stores.forEach((store) => {
          if (store[1]) {
-             // Cố gắng parse ra JSON để lưu trên Supabase nhìn cho đẹp (JSONB)
              try {
                 dataToSave[store[0]] = JSON.parse(store[1]);
              } catch {
@@ -119,9 +117,6 @@ export default function SettingsScreen() {
          }
       });
 
-      console.log("Dữ liệu chuẩn bị tải lên:", dataToSave);
-
-      // 2. Đẩy lên Supabase
       const { error } = await supabase
         .from('user_sync')
         .upsert({ 
@@ -134,19 +129,15 @@ export default function SettingsScreen() {
       Alert.alert("Đồng bộ xong!", "Dữ liệu đã được lưu an toàn trên Supabase ⚡️");
     } catch (error: any) {
       Alert.alert("Lỗi sao lưu", error.message);
-      console.log("Backup Error:", error);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Khôi phục về máy (Download) - ĐÃ GIA CỐ CHỐNG CRASH
   const handleRestore = async () => {
     if (!user) return;
     setIsSyncing(true);
     try {
-      console.log("Bắt đầu tải dữ liệu...");
-      
       const { data, error } = await supabase
         .from('user_sync')
         .select('backup_data')
@@ -156,35 +147,25 @@ export default function SettingsScreen() {
       if (error) throw error;
 
       if (data && data.backup_data) {
-        console.log("Dữ liệu thô từ Supabase:", data.backup_data);
-        
         const backup = data.backup_data;
         const pairs: [string, string][] = [];
         const keys = ['QUICK_NOTES', 'CALENDAR_NOTES', 'USER_REMINDERS', 'CYCLE_START_DATE', 'NOTIF_ENABLED', 'GEMINI_API_KEY'];
         
         keys.forEach(key => {
             if (backup[key] !== undefined && backup[key] !== null) {
-                // [FIX CRASH QUAN TRỌNG] Ép kiểu cực mạnh về String
                 let valStr = '';
-                
                 if (typeof backup[key] === 'string') {
-                    // Nếu nó đã là string (ví dụ ngày tháng '2025-01-01'), giữ nguyên
                     valStr = backup[key];
                 } else {
-                    // Nếu là Object, Array, Number, Boolean (true/false) -> Stringify hết!
-                    // AsyncStorage chỉ ăn String, đưa Boolean vào là sập App.
                     valStr = JSON.stringify(backup[key]);
                 }
-
-                // Log kiểm tra từng dòng
-                // console.log(`Key: ${key} -> Value: ${valStr}`); 
                 pairs.push([key, valStr]);
             }
         });
 
         if (pairs.length > 0) {
             await AsyncStorage.multiSet(pairs);
-            loadSettings(); // Reload lại giao diện ngay lập tức
+            loadSettings(); 
             Alert.alert("Thành công", "Đã khôi phục dữ liệu về máy! Anh hai kiểm tra lại các tab nhé.");
         } else {
             Alert.alert("Thông báo", "Trên mây không có dữ liệu nào của các mục này.");
@@ -194,20 +175,19 @@ export default function SettingsScreen() {
       }
     } catch (error: any) {
       Alert.alert("Lỗi khôi phục", "Không tải được hoặc dữ liệu lỗi.");
-      console.log("Restore Error:", error);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // --- LOGIC PICKER (GIỮ NGUYÊN) ---
+  // --- LOGIC PICKER ---
   const openPicker = (mode: typeof pickerMode) => {
     setPickerMode(mode);
     if (mode === 'date') setTempDate(startDate);
     if (mode === 'timeDay') setTempDate(timeDay);
     if (mode === 'timeNight') setTempDate(timeNight);
     if (mode === 'timeOff') setTempDate(timeOff);
-    if (mode === 'timeNormal') setTempDate(timeNormal);
+    // [ĐÃ XÓA] timeNormal
   };
 
   const confirmPicker = () => {
@@ -215,7 +195,6 @@ export default function SettingsScreen() {
     if (pickerMode === 'timeDay') { setTimeDay(tempDate); saveSettingItem('TIME_DAY', tempDate.toISOString()); }
     if (pickerMode === 'timeNight') { setTimeNight(tempDate); saveSettingItem('TIME_NIGHT', tempDate.toISOString()); }
     if (pickerMode === 'timeOff') { setTimeOff(tempDate); saveSettingItem('TIME_OFF', tempDate.toISOString()); }
-    if (pickerMode === 'timeNormal') { setTimeNormal(tempDate); saveSettingItem('TIME_NORMAL', tempDate.toISOString()); }
     setPickerMode('none');
   };
 
@@ -227,7 +206,6 @@ export default function SettingsScreen() {
         if (pickerMode === 'timeDay') { setTimeDay(selectedDate); saveSettingItem('TIME_DAY', selectedDate.toISOString()); }
         if (pickerMode === 'timeNight') { setTimeNight(selectedDate); saveSettingItem('TIME_NIGHT', selectedDate.toISOString()); }
         if (pickerMode === 'timeOff') { setTimeOff(selectedDate); saveSettingItem('TIME_OFF', selectedDate.toISOString()); }
-        if (pickerMode === 'timeNormal') { setTimeNormal(selectedDate); saveSettingItem('TIME_NORMAL', selectedDate.toISOString()); }
       }
     } else {
       if (selectedDate) setTempDate(selectedDate);
@@ -243,13 +221,9 @@ export default function SettingsScreen() {
     subText: { color: colors.subText },
     iconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.iconBg, justifyContent: 'center' as const, alignItems: 'center' as const },
     separator: { height: 1, backgroundColor: colors.border, marginLeft: 65 },
-    
-    // Auth Styles
     authBtn: { backgroundColor: colors.primary, padding: 12, borderRadius: 10, alignItems: 'center' as const, marginTop: 10 },
     authInput: { backgroundColor: colors.iconBg, color: colors.text, padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
     syncBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border },
-    
-    // Modal Styles
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' as const },
     pickerContainer: { backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30, borderWidth: 1, borderColor: colors.border },
     pickerHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, padding: 15, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.iconBg, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
@@ -309,7 +283,7 @@ export default function SettingsScreen() {
              )}
           </View>
 
-          {/* CÁC PHẦN CÀI ĐẶT KHÁC (GIỮ NGUYÊN) */}
+          {/* CÁC PHẦN CÀI ĐẶT KHÁC */}
           <Text style={dynamicStyles.sectionTitle}>🎨 GIAO DIỆN</Text>
           <View style={dynamicStyles.card}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15}}>
@@ -346,22 +320,19 @@ export default function SettingsScreen() {
                   <Text style={{flex: 1, fontSize: 16, marginLeft: 15, color: colors.text}}>Giờ nhắc Ca Ngày</Text>
                   <Text style={{fontSize: 16, fontWeight: 'bold', marginRight: 5, color: colors.primary}}>{format(timeDay, 'HH:mm')}</Text>
                 </TouchableOpacity>
+                <View style={dynamicStyles.separator} />
                 <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', padding: 15}} onPress={() => openPicker('timeNight')}>
                   <View style={dynamicStyles.iconBox}><Ionicons name="moon" size={20} color="#60A5FA" /></View>
                   <Text style={{flex: 1, fontSize: 16, marginLeft: 15, color: colors.text}}>Giờ nhắc Ca Đêm</Text>
                   <Text style={{fontSize: 16, fontWeight: 'bold', marginRight: 5, color: colors.primary}}>{format(timeNight, 'HH:mm')}</Text>
                 </TouchableOpacity>
+                <View style={dynamicStyles.separator} />
                  <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', padding: 15}} onPress={() => openPicker('timeOff')}>
                   <View style={dynamicStyles.iconBox}><Ionicons name="cafe" size={20} color="#10B981" /></View>
                   <Text style={{flex: 1, fontSize: 16, marginLeft: 15, color: colors.text}}>Giờ nhắc Ngày Nghỉ</Text>
                   <Text style={{fontSize: 16, fontWeight: 'bold', marginRight: 5, color: colors.primary}}>{format(timeOff, 'HH:mm')}</Text>
                 </TouchableOpacity>
-                <View style={dynamicStyles.separator} />
-                <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', padding: 15}} onPress={() => openPicker('timeNormal')}>
-                  <View style={dynamicStyles.iconBox}><Ionicons name="notifications" size={20} color={colors.subText} /></View>
-                  <Text style={{flex: 1, fontSize: 16, marginLeft: 15, color: colors.text}}>Giờ nhắc Mặc định</Text>
-                  <Text style={{fontSize: 16, fontWeight: 'bold', marginRight: 5, color: colors.primary}}>{format(timeNormal, 'HH:mm')}</Text>
-                </TouchableOpacity>
+                {/* [ĐÃ XÓA] Mục Giờ mặc định ở đây */}
               </>
             )}
           </View>
@@ -391,7 +362,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL ĐĂNG NHẬP / ĐĂNG KÝ (Có KeyboardAvoidingView) */}
+      {/* MODAL ĐĂNG NHẬP / ĐĂNG KÝ */}
       <Modal transparent={true} visible={showAuthModal} animationType="slide">
         <TouchableWithoutFeedback onPress={() => setShowAuthModal(false)}>
            <KeyboardAvoidingView 

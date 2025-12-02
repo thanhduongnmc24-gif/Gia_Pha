@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { useTheme } from '../context/ThemeContext';
 import { GestureHandlerRootView, Swipeable, RectButton } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
+import * as Speech from 'expo-speech';
 
 // Kích hoạt LayoutAnimation cho Android
 if (Platform.OS === 'android') {
@@ -46,7 +47,6 @@ export default function RemindersScreen() {
   const [content, setContent] = useState('');
   const [date, setDate] = useState(new Date());
   
-  // Biến điều khiển hiển thị Picker (iOS)
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
 
@@ -58,24 +58,17 @@ export default function RemindersScreen() {
   }, []);
 
   const requestPermissions = async () => {
-    // [SỬA] Yêu cầu quyền thông báo chi tiết cho iOS
     const { status } = await Notifications.requestPermissionsAsync({
       ios: {
-        allowAlert: true, // Cho phép hiển thị cảnh báo (bao gồm màn hình khóa)
-        allowBadge: true, // Cho phép hiện số trên icon
-        allowSound: true, // Cho phép âm thanh
-        //allowAnnouncements: true, // Cho phép Siri đọc thông báo
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
       },
-      android: {
-        // Có thể thêm cấu hình Android nếu cần, nhưng để trống thì nó sẽ dùng default
-      }
+      android: {}
     });
 
     if (status !== 'granted') {
-        Alert.alert(
-            'Cần quyền', 
-            'Đại ca ơi, Tèo cần quyền thông báo. Anh mở Cài đặt để bật lên cho Tèo nhé!'
-        );
+        Alert.alert('Cần quyền', 'Đại ca ơi, bật quyền thông báo cho Tèo nhé!');
     }
   };
 
@@ -99,7 +92,7 @@ export default function RemindersScreen() {
         content: {
           title: `🔔 ${remTitle}`,
           body: remContent || 'Đến giờ hẹn rồi đại ca ơi!',
-          sound: true,
+          sound: true, 
         },
         // @ts-ignore
         trigger: remDate, 
@@ -147,9 +140,7 @@ export default function RemindersScreen() {
   };
 
   const handleOpenModal = (item?: ReminderEvent) => {
-    // Reset trạng thái picker
     setShowPicker(false);
-    
     if (item) {
       setEditingId(item.id);
       setTitle(item.title);
@@ -164,36 +155,36 @@ export default function RemindersScreen() {
     setModalVisible(true);
   };
 
-  // --- XỬ LÝ CHỌN NGÀY GIỜ (ỔN ĐỊNH) ---
+  const handleSpeakItem = (item: ReminderEvent) => {
+      Speech.stop();
+      const text = item.content ? `${item.title}. ${item.content}` : item.title;
+      Speech.speak(text, { language: 'vi-VN' });
+  };
+
   const togglePicker = (mode: 'date' | 'time') => {
-    // Nếu đang mở đúng mode đó thì đóng, chưa mở thì mở
     if (showPicker && pickerMode === mode) {
-        // Đang mở -> Đóng
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setShowPicker(false);
     } else {
-        // Mở mới hoặc chuyển mode
         setPickerMode(mode);
         if (Platform.OS === 'android') {
-            setShowPicker(true); // Android trigger render để gọi hàm bên dưới
+            setShowPicker(true); 
         } else {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            setShowPicker(true); // iOS xổ xuống
+            setShowPicker(true);
         }
     }
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
-      setShowPicker(false); // Android chọn xong tự đóng
+      setShowPicker(false);
       if (selectedDate) setDate(selectedDate);
     } else {
-      // iOS chọn real-time
       if (selectedDate) setDate(selectedDate);
     }
   };
 
-  // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: ReminderEvent }) => {
     const renderRightActions = () => (
       <RectButton style={styles.deleteAction} onPress={() => handleDelete(item.id)}>
@@ -211,6 +202,8 @@ export default function RemindersScreen() {
         <RectButton 
           style={[styles.card, {backgroundColor: colors.card, borderColor: colors.border}]} 
           onPress={() => handleOpenModal(item)} 
+          onLongPress={() => handleSpeakItem(item)}
+          delayLongPress={500}
         >
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, {color: colors.text}]}>{item.title}</Text>
@@ -221,8 +214,9 @@ export default function RemindersScreen() {
             </View>
           </View>
           {item.content ? <Text numberOfLines={2} style={[styles.cardContent, {color: colors.subText}]}>{item.content}</Text> : null}
+          <Text style={{fontSize: 9, color: colors.subText, marginTop: 5, fontStyle: 'italic'}}>(Ấn giữ để nghe đọc)</Text>
         </RectButton>
-      </Swipeable>
+      </Swipeable> 
     );
   };
 
@@ -255,7 +249,6 @@ export default function RemindersScreen() {
           ListEmptyComponent={<Text style={{textAlign:'center', color: colors.subText, marginTop: 50}}>Chưa có nhắc nhở nào.</Text>}
         />
 
-        {/* MODAL NHẬP LIỆU (CHỨA LUÔN PICKER) */}
         <Modal visible={modalVisible} animationType="slide" transparent>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
             <View style={[styles.modalContent, dynamicStyles.modalContent]}>
@@ -275,7 +268,6 @@ export default function RemindersScreen() {
 
                 <Text style={dynamicStyles.label}>Thời gian:</Text>
                 
-                {/* Hàng nút chọn Ngày/Giờ */}
                 <View style={styles.dateTimeRow}>
                   <TouchableOpacity 
                     onPress={() => togglePicker('date')} 
@@ -300,7 +292,6 @@ export default function RemindersScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* VÙNG HIỂN THỊ PICKER (CHỈ HIỆN KHI BẤM NÚT) */}
                 {showPicker && (
                     <View style={{alignItems: 'center', paddingBottom: 20}}>
                         <DateTimePicker 
@@ -312,9 +303,8 @@ export default function RemindersScreen() {
                             onChange={onDateChange}
                             textColor={colors.text}
                             themeVariant={theme}
-                            style={{width: '100%'}} // Style cho iOS spinner
+                            style={{width: '100%'}} 
                         />
-                        {/* Nút Xong nhỏ cho iOS để đóng picker */}
                         {Platform.OS === 'ios' && (
                             <TouchableOpacity onPress={() => setShowPicker(false)} style={{padding: 10}}>
                                 <Text style={{color: colors.primary, fontWeight: 'bold'}}>Xong</Text>
