@@ -13,7 +13,7 @@ const withWidget = (config) => {
     return config;
   });
 
-  // 2. Chỉnh sửa Xcode Project (CHẾ ĐỘ THỦ CÔNG 100%)
+  // 2. Chỉnh sửa Xcode Project (Manual Mode + Embedding)
   config = withXcodeProject(config, async (config) => {
     const projectPath = config.modResults.filepath;
     const project = xcode.project(projectPath);
@@ -24,7 +24,7 @@ const withWidget = (config) => {
         return;
       }
 
-      // --- TẠO CÁC ID (UUID) ---
+      // --- GENERATE UUIDs ---
       const targetUuid = project.generateUuid();
       const groupUuid = project.generateUuid();
       const configurationListUuid = project.generateUuid();
@@ -32,6 +32,12 @@ const withWidget = (config) => {
       const sourcesBuildPhaseUuid = project.generateUuid();
       const resourcesBuildPhaseUuid = project.generateUuid();
       const swiftBuildFileUuid = project.generateUuid(); 
+      
+      // UUID cho việc Embed (Gắn kết)
+      const embedPhaseUuid = project.generateUuid();
+      const productBuildFileUuid = project.generateUuid(); // File .appex khi được build
+      const containerProxyUuid = project.generateUuid();
+      const targetDependencyUuid = project.generateUuid();
 
       const mainGroup = project.getFirstProject()['firstProject']['mainGroup'];
 
@@ -60,11 +66,9 @@ const withWidget = (config) => {
         path: `"${WIDGET_TARGET_NAME}.appex"`,
         sourceTree: 'BUILT_PRODUCTS_DIR'
       };
-      // Ghi thẳng vào object
       project.hash.project.objects['PBXFileReference'][productFileRefUuid] = productFile;
       project.hash.project.objects['PBXFileReference'][productFileRefUuid + '_comment'] = WIDGET_TARGET_NAME + '.appex';
       
-      // Thêm vào Products Group (Tìm thủ công)
       const pbxGroupSection = project.hash.project.objects['PBXGroup'];
       for (const key in pbxGroupSection) {
           if (pbxGroupSection[key].name === 'Products') {
@@ -73,30 +77,20 @@ const withWidget = (config) => {
           }
       }
 
-      // --- 2. ADD FILE VÀO PROJECT (Phần này dùng hàm addFile được vì nó ổn định) ---
+      // --- 2. ADD FILE VÀO PROJECT ---
       const swiftFile = project.addFile(`${WIDGET_TARGET_NAME}/ShiftWidget.swift`, mainGroup, {});
       const plistFile = project.addFile(`${WIDGET_TARGET_NAME}/Info.plist`, mainGroup, {});
 
-      // Tạo Group Widget
-      const widgetGroup = project.addPbxGroup(
-        [swiftFile.fileRef, plistFile.fileRef],
-        WIDGET_TARGET_NAME,
-        WIDGET_TARGET_NAME
-      );
+      const widgetGroup = project.addPbxGroup([swiftFile.fileRef, plistFile.fileRef], WIDGET_TARGET_NAME, WIDGET_TARGET_NAME);
       const mainPbxGroup = project.getPBXGroupByKey(mainGroup);
       mainPbxGroup.children.push({ value: widgetGroup.uuid, comment: WIDGET_TARGET_NAME });
 
-      // --- 3. TẠO BUILD FILE (Thủ công) ---
-      const swiftBuildFile = {
-        isa: 'PBXBuildFile',
-        fileRef: swiftFile.fileRef,
-        settings: {}
-      };
+      // --- 3. TẠO BUILD FILE (Swift) ---
+      const swiftBuildFile = { isa: 'PBXBuildFile', fileRef: swiftFile.fileRef, settings: {} };
       project.hash.project.objects['PBXBuildFile'][swiftBuildFileUuid] = swiftBuildFile;
       project.hash.project.objects['PBXBuildFile'][swiftBuildFileUuid + '_comment'] = 'ShiftWidget.swift in Sources';
 
-      // --- 4. TẠO BUILD PHASES (Thủ công) ---
-      // Sources
+      // --- 4. TẠO BUILD PHASES ---
       const sourcesPhase = {
         isa: 'PBXSourcesBuildPhase',
         buildActionMask: 2147483647,
@@ -104,9 +98,7 @@ const withWidget = (config) => {
         runOnlyForDeploymentPostprocessing: 0
       };
       project.hash.project.objects['PBXSourcesBuildPhase'][sourcesBuildPhaseUuid] = sourcesPhase;
-      project.hash.project.objects['PBXSourcesBuildPhase'][sourcesBuildPhaseUuid + '_comment'] = 'Sources';
-
-      // Resources
+      
       const resourcesPhase = {
         isa: 'PBXResourcesBuildPhase',
         buildActionMask: 2147483647,
@@ -114,7 +106,6 @@ const withWidget = (config) => {
         runOnlyForDeploymentPostprocessing: 0
       };
       project.hash.project.objects['PBXResourcesBuildPhase'][resourcesBuildPhaseUuid] = resourcesPhase;
-      project.hash.project.objects['PBXResourcesBuildPhase'][resourcesBuildPhaseUuid + '_comment'] = 'Resources';
 
       // --- 5. CONFIGURATION LIST ---
       const widgetBundleId = `${config.ios.bundleIdentifier}.${WIDGET_TARGET_NAME}`;
@@ -129,35 +120,21 @@ const withWidget = (config) => {
         CODE_SIGN_ENTITLEMENTS: `${WIDGET_TARGET_NAME}/${WIDGET_TARGET_NAME}.entitlements`,
         MARKETING_VERSION: '1.0',
         CURRENT_PROJECT_VERSION: '1',
-        CODE_SIGNING_ALLOWED: 'NO', 
-        CODE_SIGNING_REQUIRED: 'NO',
-        CODE_SIGN_IDENTITY: '""',
-        DEVELOPMENT_TEAM: '""'
+        CODE_SIGNING_ALLOWED: 'NO', CODE_SIGNING_REQUIRED: 'NO', CODE_SIGN_IDENTITY: '""', DEVELOPMENT_TEAM: '""'
       };
 
       const xcConfig = {
         isa: 'XCConfigurationList',
         buildConfigurations: [
-          {
-            name: 'Debug',
-            isa: 'XCBuildConfiguration',
-            buildSettings: { ...buildSettings, MTL_ENABLE_DEBUG_INFO: 'INCLUDE_SOURCE' },
-          },
-          {
-            name: 'Release',
-            isa: 'XCBuildConfiguration',
-            buildSettings: { ...buildSettings, MTL_ENABLE_DEBUG_INFO: 'NO' },
-          },
+          { name: 'Debug', isa: 'XCBuildConfiguration', buildSettings: { ...buildSettings, MTL_ENABLE_DEBUG_INFO: 'INCLUDE_SOURCE' } },
+          { name: 'Release', isa: 'XCBuildConfiguration', buildSettings: { ...buildSettings, MTL_ENABLE_DEBUG_INFO: 'NO' } },
         ],
         defaultConfigurationIsVisible: 0,
         defaultConfigurationName: 'Release',
       };
-      
-      // Đăng ký Configuration List vào Hash
       project.hash.project.objects['XCConfigurationList'][configurationListUuid] = xcConfig;
-      project.hash.project.objects['XCConfigurationList'][configurationListUuid + '_comment'] = 'Build configuration list for PBXNativeTarget "' + WIDGET_TARGET_NAME + '"';
 
-      // --- 6. NATIVE TARGET (Thủ công) ---
+      // --- 6. NATIVE TARGET (WIDGET) ---
       const nativeTarget = {
         isa: 'PBXNativeTarget',
         buildConfigurationList: configurationListUuid,
@@ -172,46 +149,98 @@ const withWidget = (config) => {
         productReference: productFileRefUuid,
         productType: '"com.apple.product-type.app-extension"',
       };
-
-      // Đăng ký Target vào Hash
       project.hash.project.objects['PBXNativeTarget'][targetUuid] = nativeTarget;
       project.hash.project.objects['PBXNativeTarget'][targetUuid + '_comment'] = WIDGET_TARGET_NAME;
 
-      // --- 7. LINK TARGET VÀO PROJECT (FIX LỖI CŨ - DÙNG LOOP) ---
-      // Đây là đoạn sửa lỗi: Tèo tìm thủ công và Push thẳng vào mảng, KHÔNG dùng hàm thư viện
+      // Link Target vào Project
       const pbxProjectSection = project.hash.project.objects['PBXProject'];
       for (const key in pbxProjectSection) {
           if (!key.endsWith('_comment')) {
-              const pbxProject = pbxProjectSection[key];
-              pbxProject.targets.push({ value: targetUuid, comment: WIDGET_TARGET_NAME });
-              break; // Tìm thấy thì dừng ngay
+              pbxProjectSection[key].targets.push({ value: targetUuid, comment: WIDGET_TARGET_NAME });
+              break; 
           }
       }
 
+      // ==========================================================================
+      // --- 7. QUAN TRỌNG: EMBED WIDGET VÀO MAIN APP (PHẦN MỚI THÊM) ---
+      // ==========================================================================
+      
+      // A. Tìm Main App Target
+      let mainAppTargetKey = null;
+      const nativeTargets = project.hash.project.objects['PBXNativeTarget'];
+      for (const key in nativeTargets) {
+          // Tìm target không phải là widget và là application
+          if (key !== targetUuid && nativeTargets[key].productType === '"com.apple.product-type.application"') {
+              mainAppTargetKey = key;
+              break;
+          }
+      }
+
+      if (mainAppTargetKey) {
+          // B. Tạo Build File cho .appex (để copy)
+          const appexBuildFile = {
+              isa: 'PBXBuildFile',
+              fileRef: productFileRefUuid,
+              settings: { ATTRIBUTES: ['RemoveHeadersOnCopy'] }
+          };
+          project.hash.project.objects['PBXBuildFile'][productBuildFileUuid] = appexBuildFile;
+          project.hash.project.objects['PBXBuildFile'][productBuildFileUuid + '_comment'] = `${WIDGET_TARGET_NAME}.appex in Embed App Extensions`;
+
+          // C. Tạo Container Item Proxy (Liên kết phụ thuộc)
+          const containerProxy = {
+              isa: 'PBXContainerItemProxy',
+              containerPortal: project.hash.project.rootObject,
+              proxyType: 1,
+              remoteGlobalIDString: targetUuid,
+              remoteInfo: WIDGET_TARGET_NAME
+          };
+          project.hash.project.objects['PBXContainerItemProxy'][containerProxyUuid] = containerProxy;
+
+          // D. Tạo Target Dependency
+          const targetDependency = {
+              isa: 'PBXTargetDependency',
+              target: targetUuid,
+              targetProxy: containerProxyUuid
+          };
+          project.hash.project.objects['PBXTargetDependency'][targetDependencyUuid] = targetDependency;
+
+          // E. Tạo Copy Files Build Phase (Embed App Extensions)
+          const copyFilesPhase = {
+              isa: 'PBXCopyFilesBuildPhase',
+              buildActionMask: 2147483647,
+              dstPath: '""',
+              dstSubfolderSpec: 13, // 13 = PlugIns directory
+              files: [{ value: productBuildFileUuid, comment: `${WIDGET_TARGET_NAME}.appex in Embed App Extensions` }],
+              name: '"Embed App Extensions"',
+              runOnlyForDeploymentPostprocessing: 0
+          };
+          project.hash.project.objects['PBXCopyFilesBuildPhase'][embedPhaseUuid] = copyFilesPhase;
+
+          // F. Gắn vào Main App Target
+          const mainAppTarget = nativeTargets[mainAppTargetKey];
+          
+          // Thêm dependency
+          if (!mainAppTarget.dependencies) mainAppTarget.dependencies = [];
+          mainAppTarget.dependencies.push({ value: targetDependencyUuid, comment: 'PBXTargetDependency' });
+
+          // Thêm build phase
+          if (!mainAppTarget.buildPhases) mainAppTarget.buildPhases = [];
+          mainAppTarget.buildPhases.push({ value: embedPhaseUuid, comment: 'Embed App Extensions' });
+          
+          console.log(`✅ Đã gắn Widget vào App Chính (Target ID: ${mainAppTargetKey})`);
+      } else {
+          console.error("❌ Không tìm thấy Main App Target để gắn Widget!");
+      }
+
       // --- 8. ENTITLEMENTS ---
-      const entitlementsContent = `
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>com.apple.security.application-groups</key>
-            <array>
-                <string>${APP_GROUP_IDENTIFIER}</string>
-            </array>
-        </dict>
-        </plist>
-      `;
+      const entitlementsContent = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.application-groups</key><array><string>${APP_GROUP_IDENTIFIER}</string></array></dict></plist>`;
       fs.writeFileSync(path.join(widgetDestDir, `${WIDGET_TARGET_NAME}.entitlements`), entitlementsContent.trim());
-      // Chỉ add file reference, không add vào build phase
       project.addFile(`${WIDGET_TARGET_NAME}/${WIDGET_TARGET_NAME}.entitlements`, widgetGroup.uuid, {});
       
-      // Ghi file
       fs.writeFileSync(projectPath, project.writeSync());
     });
-
     return config;
   });
-
   return config;
 };
 
