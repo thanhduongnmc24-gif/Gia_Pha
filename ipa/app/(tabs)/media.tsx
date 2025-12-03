@@ -18,14 +18,12 @@ type Character = {
   generatedPrompt: string; 
 };
 
-type MediaType = 'video' | 'image' | 'title';
-
 export default function MediaScreen() {
   const { colors } = useTheme();
 
   // --- STATE CHUNG ---
   const [apiKey, setApiKey] = useState('');
-  const [mediaType, setMediaType] = useState<MediaType>('video'); 
+  const [mediaType, setMediaType] = useState<'video' | 'image' | 'title'>('video'); 
   const [isGenerating, setIsGenerating] = useState(false); 
 
   // --- STATE CẤU HÌNH ---
@@ -92,7 +90,7 @@ export default function MediaScreen() {
   };
 
   // --- HÀM GỌI GEMINI ---
-  const callGemini = async (promptInput: string, maxChars: number, mode: MediaType | 'character', style: string = '') => {
+  const callGemini = async (promptInput: string, maxChars: number, mode: 'video' | 'image' | 'character' | 'title', style: string = '') => {
     if (!apiKey.trim()) {
       Alert.alert("Thiếu Key", "Nhập API Key trước đã đại ca!");
       return null;
@@ -101,6 +99,7 @@ export default function MediaScreen() {
     setIsGenerating(true);
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
+      // Dùng 1.5-flash cho ổn định và nhanh
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
       
       let finalPrompt = '';
@@ -114,6 +113,7 @@ export default function MediaScreen() {
       }
       else if (mode === 'video' || mode === 'image') {
         const role = mode === 'video' ? 'Video Prompter' : 'Image Prompter';
+        // [SỬA] Prompt yêu cầu đầu ra "trần trụi", không nhãn mác
         finalPrompt = `
           Role: ${role}.
           Task: Write a prompt based on input: "${promptInput}" (Style: ${style}).
@@ -141,9 +141,12 @@ export default function MediaScreen() {
               const parts = text.split('|||');
               const vi = parts[0].trim();
               let en = parts[1] ? parts[1].trim() : '';
+              
               if (!en) en = text; // Fallback
+
               return { vi: vi, en: en };
           } else {
+              // Không tách được thì trả về hết vào ô tiếng Anh
               return { vi: 'Không tách được nội dung', en: text.trim() };
           }
       }
@@ -221,11 +224,9 @@ export default function MediaScreen() {
           <TextInput style={dynamicStyles.input} placeholder="Key Gemini..." placeholderTextColor={colors.subText} secureTextEntry value={apiKey} onChangeText={handleKeyChange} />
 
           <View style={dynamicStyles.tabContainer}>
-             {(['video', 'image', 'title'] as MediaType[]).map((t) => (
+             {['video', 'image', 'title'].map((t: any) => (
                <TouchableOpacity key={t} style={[dynamicStyles.tabBtn, {backgroundColor: mediaType===t ? colors.card : 'transparent'}]} onPress={() => setMediaType(t)}>
-                  <Text style={{fontWeight:'bold', color: mediaType===t ? colors.primary : colors.subText}}>
-                    {t === 'video' ? 'Video 🎥' : t === 'image' ? 'Ảnh 🖼️' : 'Tiêu đề ✍️'}
-                  </Text>
+                  <Text style={{fontWeight:'bold', color: mediaType===t ? colors.primary : colors.subText}}>{t === 'video' ? 'Video 🎥' : t === 'image' ? 'Ảnh 🖼️' : 'Tiêu đề ✍️'}</Text>
                </TouchableOpacity>
              ))}
           </View>

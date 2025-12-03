@@ -16,9 +16,6 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCalendarsUsageDescription": "App cần quyền truy cập Lịch để nhắc nhở ca làm việc.",
         "NSCalendarsFullAccessUsageDescription": "App cần quyền ghi lịch để lưu nhắc nhở ca làm việc.",
-        "NSPhotoLibraryUsageDescription": "App cần truy cập thư viện ảnh để chọn ảnh người mẫu và sản phẩm.",
-        "NSCameraUsageDescription": "App cần truy cập máy ảnh để chụp ảnh người mẫu và sản phẩm.",
-        "NSMicrophoneUsageDescription": "App cần truy cập micro khi quay video.",
         "UIBackgroundModes": [
           "fetch"
         ]
@@ -35,10 +32,7 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.READ_CALENDAR",
-        "android.permission.WRITE_CALENDAR",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.CAMERA"
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
@@ -51,13 +45,6 @@
         "expo-calendar",
         {
           "calendarPermission": "App cần quyền truy cập Lịch để nhắc nhở ca làm việc."
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "App cần truy cập ảnh để bạn chọn ảnh mẫu.",
-          "cameraPermission": "App cần truy cập camera để chụp ảnh mẫu."
         }
       ],
       "./without-push.js",
