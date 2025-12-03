@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity, FlatList, Modal, TextInput, 
-  Platform, KeyboardAvoidingView, ScrollView, Animated 
+  Platform, KeyboardAvoidingView, ScrollView, Animated, Keyboard 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { GestureHandlerRootView, Swipeable, RectButton } from 'react-native-gesture-handler';
-// [MỚI] Import thư viện WebBrowser
 import * as WebBrowser from 'expo-web-browser';
 
 type QuickNote = {
@@ -26,6 +25,9 @@ export default function NotesScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   
+  // [MỚI] State lưu từ khóa tìm kiếm
+  const [searchQuery, setSearchQuery] = useState('');
+
   const rowRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useEffect(() => { loadNotes(); }, []);
@@ -81,12 +83,10 @@ export default function NotesScreen() {
     }
   };
 
-  // [SỬA] Hàm mở link bằng In-App Browser
   const handlePressLink = async (text: string) => {
     if (text.startsWith('http')) {
         try {
             await WebBrowser.openBrowserAsync(text, {
-                // Tùy chỉnh màu sắc trình duyệt theo theme app
                 controlsColor: colors.primary,
                 toolbarColor: colors.card,
                 presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN
@@ -96,6 +96,15 @@ export default function NotesScreen() {
         }
     }
   };
+
+  // [LOGIC MỚI] Lọc ghi chú dựa trên từ khóa tìm kiếm
+  const filteredNotes = notes.filter(n => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+        (n.title && n.title.toLowerCase().includes(searchLower)) ||
+        (n.content && n.content.toLowerCase().includes(searchLower))
+    );
+  });
 
   const renderItem = ({ item }: { item: QuickNote }) => {
     const isLink = item.title.startsWith('http');
@@ -126,7 +135,6 @@ export default function NotesScreen() {
         >
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             
-            {/* PHẦN 1: TIÊU ĐỀ (Chứa Logic Link) */}
             <View style={styles.titleSection}>
                {isLink ? (
                   <TouchableOpacity onPress={() => handlePressLink(item.title)} style={{flex: 1}}>
@@ -152,7 +160,6 @@ export default function NotesScreen() {
 
             <View style={[styles.divider, {backgroundColor: colors.border}]} />
 
-            {/* PHẦN 2: NỘI DUNG (Bấm vào đây để Sửa) */}
             <TouchableOpacity 
                style={styles.contentSection} 
                activeOpacity={0.7}
@@ -172,6 +179,8 @@ export default function NotesScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaView style={{flex: 1}} edges={['top']}>
+        
+        {/* HEADER */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, {color: colors.text}]}>Ghi Chú 📝</Text>
           <TouchableOpacity onPress={() => handleOpenModal()} style={[styles.addBtn, {backgroundColor: colors.primary}]}>
@@ -179,10 +188,35 @@ export default function NotesScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* [MỚI] THANH TÌM KIẾM */}
+        <View style={{paddingHorizontal: 20, marginBottom: 10}}>
+            <View style={[styles.searchBar, {backgroundColor: colors.iconBg, borderColor: colors.border}]}>
+                <Ionicons name="search" size={20} color={colors.subText} />
+                <TextInput 
+                    style={[styles.searchInput, {color: colors.text}]}
+                    placeholder="Tìm tiêu đề hoặc nội dung..." 
+                    placeholderTextColor={colors.subText}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => {setSearchQuery(''); Keyboard.dismiss();}}>
+                        <Ionicons name="close-circle" size={20} color={colors.subText} />
+                    </TouchableOpacity>
+                )}
+            </View>
+        </View>
+
         <FlatList 
-          data={notes} renderItem={renderItem} keyExtractor={i => i.id} 
-          contentContainerStyle={{padding: 20, paddingBottom: 100}}
-          ListEmptyComponent={<Text style={{textAlign:'center', color: colors.subText, marginTop: 50}}>Trống trơn. Bấm dấu + để thêm.</Text>}
+          data={filteredNotes} 
+          renderItem={renderItem} 
+          keyExtractor={i => i.id} 
+          contentContainerStyle={{padding: 20, paddingBottom: 100, paddingTop: 5}}
+          ListEmptyComponent={
+             <Text style={{textAlign:'center', color: colors.subText, marginTop: 50}}>
+                {searchQuery ? 'Không tìm thấy kết quả nào.' : 'Trống trơn. Bấm dấu + để thêm.'}
+             </Text>
+          }
         />
 
         <Modal visible={modalVisible} animationType="slide" transparent>
@@ -225,10 +259,17 @@ export default function NotesScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, paddingBottom: 10 },
   headerTitle: { fontSize: 24, fontWeight: 'bold' },
   addBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   
+  // [MỚI] Style cho Search Bar
+  searchBar: {
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
+      borderRadius: 12, borderWidth: 1, marginBottom: 5
+  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, height: 30 },
+
   noteWrapper: {
     marginBottom: 12,
   },
