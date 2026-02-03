@@ -8,11 +8,13 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useTab } from '../context/TabContext'; // [MỚI] Import Context Tab
 
 import { supabase } from '../supabaseConfig'; 
 
 export default function SettingsScreen() {
   const { theme, toggleTheme, colors } = useTheme();
+  const { tabState, toggleTab } = useTab(); // [MỚI] Lấy hàm quản lý Tab
   
   // --- STATE CÀI ĐẶT ---
   const [startDate, setStartDate] = useState(new Date());
@@ -258,6 +260,46 @@ export default function SettingsScreen() {
              )}
           </View>
 
+          <Text style={dynamicStyles.sectionTitle}>🎨 GIAO DIỆN</Text>
+          <View style={dynamicStyles.card}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10}}>
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <View style={dynamicStyles.iconBox}><Ionicons name={theme === 'dark' ? "moon" : "sunny"} size={18} color={theme === 'dark' ? "#FDB813" : "#F59E0B"} /></View>
+                <Text style={[dynamicStyles.text, {marginLeft: 12, fontSize: 15, fontWeight: '500'}]}>{theme === 'dark' ? 'Chế độ Tối' : 'Chế độ Sáng'}</Text>
+              </View>
+              <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{ false: "#E5E7EB", true: colors.primary }} thumbColor={"#fff"} style={{ transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }} />
+            </View>
+          </View>
+
+          {/* [PHẦN MỚI THÊM] QUẢN LÝ TAB */}
+          <Text style={dynamicStyles.sectionTitle}>👁️ QUẢN LÝ TAB</Text>
+          <View style={dynamicStyles.card}>
+            {[
+              { key: 'calendar', label: 'Lịch làm việc', icon: 'calendar' },
+              { key: 'notes', label: 'Ghi chú', icon: 'document-text' },
+              { key: 'sheets', label: 'Trang tính', icon: 'grid' },
+              { key: 'media', label: 'Media AI', icon: 'images' },
+              { key: 'reminders', label: 'Nhắc nhở', icon: 'alarm' },
+            ].map((item, index, arr) => (
+              <View key={item.key} style={{
+                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10,
+                  borderBottomWidth: index < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border
+              }}>
+                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                   <View style={dynamicStyles.iconBox}><Ionicons name={item.icon as any} size={18} color={colors.primary} /></View>
+                   <Text style={[dynamicStyles.text, {marginLeft: 12, fontSize: 15}]}>{item.label}</Text>
+                </View>
+                <Switch 
+                  value={tabState[item.key as keyof typeof tabState]} 
+                  onValueChange={() => toggleTab(item.key as any)} 
+                  trackColor={{ false: "#E5E7EB", true: colors.primary }} 
+                  thumbColor={"#fff"} 
+                  style={{ transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }} 
+                />
+              </View>
+            ))}
+          </View>
+
           {/* [PHẦN MỚI] CẤU HÌNH API KEY */}
           <Text style={dynamicStyles.sectionTitle}>🤖 CẤU HÌNH AI (GEMINI)</Text>
           <View style={dynamicStyles.card}>
@@ -322,17 +364,6 @@ export default function SettingsScreen() {
               <Text style={{flex: 1, fontSize: 15, marginLeft: 12, color: colors.text}}>{format(startDate, 'dd/MM/yyyy')}</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.subText} />
             </TouchableOpacity>
-          </View>
-
-          <Text style={dynamicStyles.sectionTitle}>🎨 GIAO DIỆN</Text>
-          <View style={dynamicStyles.card}>
-            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10}}>
-              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <View style={dynamicStyles.iconBox}><Ionicons name={theme === 'dark' ? "moon" : "sunny"} size={18} color={theme === 'dark' ? "#FDB813" : "#F59E0B"} /></View>
-                <Text style={[dynamicStyles.text, {marginLeft: 12, fontSize: 15, fontWeight: '500'}]}>{theme === 'dark' ? 'Chế độ Tối' : 'Chế độ Sáng'}</Text>
-              </View>
-              <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{ false: "#E5E7EB", true: colors.primary }} thumbColor={"#fff"} style={{ transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }} />
-            </View>
           </View>
 
           <Text style={dynamicStyles.sectionTitle}>🔔 CẤU HÌNH THÔNG BÁO</Text>

@@ -1,13 +1,15 @@
 import { Stack } from 'expo-router';
-import { ThemeProvider } from './context/ThemeContext'; // Đảm bảo đường dẫn đúng tới file context
+import { ThemeProvider } from './context/ThemeContext';
+import { TabProvider } from './context/TabContext'; // Import cái kho quản lý Tab
 
 export default function RootLayout() {
   return (
-    // Đây là "Trạm phát điện" cung cấp Theme cho toàn bộ App
     <ThemeProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <TabProvider> {/* Bọc thêm ông thần này để cả app hiểu lệnh bật tắt */}
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+      </TabProvider>
     </ThemeProvider>
   );
 }
