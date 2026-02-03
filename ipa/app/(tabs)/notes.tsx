@@ -191,13 +191,15 @@ export default function NotesScreen() {
           overshootRight={false}
           containerStyle={{borderRadius: 12, overflow: 'hidden'}} 
         >
-          {/* [MỚI] Thêm viền nếu là Pinned */}
+          {/* [ĐÃ SỬA] Bỏ viền đậm, chỉ giữ logic màu nền */}
           <View style={[
               styles.card, 
               { 
+                  // Vẫn giữ màu nền hơi khác chút để biết là đang ghim (nếu anh hai muốn bỏ luôn thì báo Tèo)
                   backgroundColor: item.isPinned ? (colors.theme === 'dark' ? '#312e81' : '#EEF2FF') : colors.card, 
-                  borderColor: item.isPinned ? colors.primary : colors.border,
-                  borderWidth: item.isPinned ? 1.5 : 1
+                  // Viền về mặc định như các note khác
+                  borderColor: colors.border,
+                  borderWidth: 1
               }
           ]}>
             
@@ -220,10 +222,11 @@ export default function NotesScreen() {
                {/* Ngày tháng */}
                <Text style={{fontSize: 11, color: colors.subText, marginLeft: 10, marginRight: 10}}>{item.date}</Text>
                
-               {/* [MỚI] Nút PIN */}
+               {/* [ĐÃ SỬA] Đổi icon từ push-pin thành pin */}
                <TouchableOpacity onPress={() => togglePin(item.id)} style={{padding: 4}}>
                    <Ionicons 
-                      name={item.isPinned ? "push-pin" : "push-pin-outline"} 
+                      // Đổi tên icon ở đây nha anh hai
+                      name={item.isPinned ? "pin" : "pin-outline"} 
                       size={20} 
                       color={item.isPinned ? colors.primary : colors.subText} 
                    />
