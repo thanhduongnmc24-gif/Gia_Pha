@@ -24,6 +24,9 @@ type NoteData = {
 };
 
 const requestNotificationsPermissions = async () => {
+  // Trên Web thì bỏ qua vụ xin quyền này để đỡ lỗi
+  if (Platform.OS === 'web') return;
+
   const { status } = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowBadge: true, allowSound: true },
     android: {}
@@ -93,6 +96,9 @@ export default function CalendarScreen() {
   );
 
   const scheduleAutoNotification = async (date: Date, lines: string[], type: string) => {
+    // [FIX QUAN TRỌNG] Nếu là Web thì thoát luôn, không gọi hàm thông báo
+    if (Platform.OS === 'web') return;
+
     if (!isNotifEnabled) return;
     let selectedTime = times.normal;
     let prefixTitle = "Ghi chú";
@@ -144,8 +150,15 @@ export default function CalendarScreen() {
     setSelectedDate(date);
     const dateKey = format(date, 'yyyy-MM-dd');
     const manualData = notes[dateKey];
-    const autoType = calculateAutoShift(date);
-    setTempType(autoType || ''); 
+    
+    // [FIX LOGIC] Nếu đã có dữ liệu cũ thì ưu tiên hiển thị nó, không tính toán lại
+    if (manualData && manualData.type) {
+        setTempType(manualData.type);
+    } else {
+        const autoType = calculateAutoShift(date);
+        setTempType(autoType || ''); 
+    }
+    
     setTempNotesList(manualData?.noteLines?.length ? [...manualData.noteLines] : ['']);
     setModalVisible(true);
   };
@@ -158,16 +171,39 @@ export default function CalendarScreen() {
     const newList = [...tempNotesList]; newList.splice(index, 1); setTempNotesList(newList);
   };
 
+  // [HÀM ĐÃ SỬA LỖI]
   const handleSave = async () => {
     if (selectedDate) {
       const dateKey = format(selectedDate, 'yyyy-MM-dd');
       let newNotes = { ...notes };
       const cleanLines = tempNotesList.filter(line => line.trim() !== '');
-      if (cleanLines.length === 0) delete newNotes[dateKey];
-      else { newNotes[dateKey] = { type: tempType, noteLines: cleanLines }; await scheduleAutoNotification(selectedDate, cleanLines, tempType); }
+
+      // 1. Cập nhật dữ liệu vào biến State trước
+      if (cleanLines.length === 0) {
+        delete newNotes[dateKey];
+      } else {
+        newNotes[dateKey] = { type: tempType, noteLines: cleanLines };
+      }
       setNotes(newNotes);
+
+      // 2. Đóng Modal NGAY LẬP TỨC để giao diện phản hồi nhanh
       setModalVisible(false);
-      try { await AsyncStorage.setItem('CALENDAR_NOTES', JSON.stringify(newNotes)); } catch (e) {}
+
+      // 3. Lưu vào bộ nhớ máy (AsyncStorage)
+      try {
+        await AsyncStorage.setItem('CALENDAR_NOTES', JSON.stringify(newNotes));
+      } catch (e) {
+        console.log("Lỗi lưu bộ nhớ:", e);
+      }
+
+      // 4. Xử lý thông báo sau cùng (Tách biệt ra, có lỗi cũng không ảnh hưởng việc lưu)
+      if (cleanLines.length > 0) {
+        try {
+           await scheduleAutoNotification(selectedDate, cleanLines, tempType);
+        } catch (err) {
+           console.log("Lỗi tạo thông báo (nhưng dữ liệu đã được lưu):", err);
+        }
+      }
     }
   };
 

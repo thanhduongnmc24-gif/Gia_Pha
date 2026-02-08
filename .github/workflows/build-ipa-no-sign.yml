@@ -45,19 +45,22 @@ jobs:
             -configuration Release \
             -archivePath ../build/MyApp.xcarchive \
             -sdk iphoneos \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            -CODE_SIGNING_ALLOWED=NO \
+            -CODE_SIGNING_REQUIRED=NO \
+            -CODE_SIGN_IDENTITY=""
 
       - name: Create IPA from Archive
         run: |
           mkdir -p build/Payload
           mv build/MyApp.xcarchive/Products/Applications/*.app build/Payload/
           cd build
-          zip -r -9 MyApp.ipa Payload
+          # [SỬA 1] Đặt tên file IPA là GhiChu.ipa
+          zip -r -9 GhiChu.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: app-unsigned
-          path: ipa/build/MyApp.ipa
+          # [SỬA 2] Đặt tên artifact là File -> Tải về sẽ là File.zip
+          name: FileCaiDat
+          # [SỬA 3] Đường dẫn trỏ đúng vào file GhiChu.ipa vừa tạo
+          path: ipa/build/GhiChu.ipa

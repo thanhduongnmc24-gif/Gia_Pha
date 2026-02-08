@@ -10,8 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "4qijiyzb.no0DEVVIPv6.CertApple.com",
-      "appleTeamId": "YXYM3HTK79",
+      "bundleIdentifier": "Ghichu.duongnt.io.vn",
+      "appleTeamId": "GhiChu",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCalendarsUsageDescription": "App cần quyền truy cập Lịch để nhắc nhở ca làm việc.",
