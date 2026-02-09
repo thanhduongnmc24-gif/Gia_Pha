@@ -8,13 +8,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useTab } from '../context/TabContext'; // [MỚI] Import Context Tab
+import { useTab } from '../context/TabContext'; // Import Context quản lý Tab
 
+// @ts-ignore
 import { supabase } from '../supabaseConfig'; 
 
 export default function SettingsScreen() {
   const { theme, toggleTheme, colors } = useTheme();
-  const { tabState, toggleTab } = useTab(); // [MỚI] Lấy hàm quản lý Tab
+  const { tabState, toggleTab } = useTab(); 
   
   // --- STATE CÀI ĐẶT ---
   const [startDate, setStartDate] = useState(new Date());
@@ -26,7 +27,7 @@ export default function SettingsScreen() {
   // [STATE CHU KỲ]
   const [cyclePattern, setCyclePattern] = useState<string[]>(['ngay', 'dem', 'nghi']);
   
-  // [MỚI] STATE API KEY
+  // [STATE API KEY]
   const [geminiKey, setGeminiKey] = useState('');
 
   const [pickerMode, setPickerMode] = useState<'none' | 'date' | 'timeDay' | 'timeNight' | 'timeOff'>('none');
@@ -46,20 +47,26 @@ export default function SettingsScreen() {
   }, []);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    setUser(session?.user || null);
-    supabase.auth.onAuthStateChange((_event: any, session: any) => {
-      setUser(session?.user || null);
-      if (session?.user) setShowAuthModal(false);
-    });
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user || null);
+        supabase.auth.onAuthStateChange((_event: any, session: any) => {
+        setUser(session?.user || null);
+        if (session?.user) setShowAuthModal(false);
+        });
+    } catch (error) {
+        console.log("Lỗi checkUser:", error);
+    }
   };
 
   const loadSettings = async () => {
     try {
       const savedDate = await AsyncStorage.getItem('CYCLE_START_DATE');
       if (savedDate) setStartDate(new Date(savedDate));
+      
       const savedEnabled = await AsyncStorage.getItem('NOTIF_ENABLED');
       if (savedEnabled) setIsNotifEnabled(JSON.parse(savedEnabled));
+      
       const tDay = await AsyncStorage.getItem('TIME_DAY'); if (tDay) setTimeDay(new Date(tDay));
       const tNight = await AsyncStorage.getItem('TIME_NIGHT'); if (tNight) setTimeNight(new Date(tNight));
       const tOff = await AsyncStorage.getItem('TIME_OFF'); if (tOff) setTimeOff(new Date(tOff));
@@ -67,7 +74,6 @@ export default function SettingsScreen() {
       const savedPattern = await AsyncStorage.getItem('WORK_CYCLE_PATTERN');
       if (savedPattern) setCyclePattern(JSON.parse(savedPattern));
 
-      // [MỚI] Load Key
       const savedKey = await AsyncStorage.getItem('GEMINI_API_KEY');
       if (savedKey) setGeminiKey(savedKey);
 
@@ -78,7 +84,6 @@ export default function SettingsScreen() {
       try { await AsyncStorage.setItem(key, value); } catch (e) { console.error(e); }
   };
 
-  // [MỚI] Lưu Key khi nhập xong
   const handleSaveKey = async () => {
       await saveSettingItem('GEMINI_API_KEY', geminiKey);
       Keyboard.dismiss();
@@ -99,7 +104,7 @@ export default function SettingsScreen() {
   };
 
   const removeFromPattern = async (index: number) => {
-    if (cyclePattern.length <= 1) { Alert.alert("Chú ý", "Chu kỳ phải có ít nhất 1 bước chứ đại ca!"); return; }
+    if (cyclePattern.length <= 1) { Alert.alert("Chú ý", "Chu kỳ phải có ít nhất 1 bước!"); return; }
     const newPattern = cyclePattern.filter((_, i) => i !== index);
     setCyclePattern(newPattern);
     await saveSettingItem('WORK_CYCLE_PATTERN', JSON.stringify(newPattern));
@@ -127,7 +132,7 @@ export default function SettingsScreen() {
 
   // --- LOGIC AUTH & SYNC ---
   const handleAuth = async () => {
-    if (!email || !password) { Alert.alert("Thiếu thông tin", "Nhập email và mật khẩu đi đại ca!"); return; }
+    if (!email || !password) { Alert.alert("Thiếu thông tin", "Nhập email và mật khẩu!"); return; }
     try {
       if (authMode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -136,7 +141,7 @@ export default function SettingsScreen() {
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        Alert.alert("Thành công", "Đã tạo tài khoản!");
+        Alert.alert("Thành công", "Đã tạo tài khoản! Hãy kiểm tra email để xác nhận.");
       }
     } catch (error: any) { Alert.alert("Lỗi", error.message); }
   };
@@ -150,9 +155,10 @@ export default function SettingsScreen() {
       const stores = await AsyncStorage.multiGet(keys);
       const dataToSave: any = {};
       stores.forEach((store) => { if (store[1]) try { dataToSave[store[0]] = JSON.parse(store[1]); } catch { dataToSave[store[0]] = store[1]; } });
+      
       const { error } = await supabase.from('user_sync').upsert({ user_id: user.id, backup_data: dataToSave, updated_at: new Date() });
-      if (error) throw error; Alert.alert("Đồng bộ xong!", "Đã lưu lên mây ⚡️");
-    } catch (error: any) { Alert.alert("Lỗi", error.message); } finally { setIsSyncing(false); }
+      if (error) throw error; Alert.alert("Đồng bộ xong!", "Đã lưu dữ liệu lên đám mây ☁️");
+    } catch (error: any) { Alert.alert("Lỗi sao lưu", error.message); } finally { setIsSyncing(false); }
   };
 
   const handleRestore = async () => {
@@ -166,10 +172,14 @@ export default function SettingsScreen() {
         const pairs: [string, string][] = [];
         const keys = ['QUICK_NOTES', 'CALENDAR_NOTES', 'USER_REMINDERS', 'CYCLE_START_DATE', 'NOTIF_ENABLED', 'GEMINI_API_KEY', 'WORK_CYCLE_PATTERN'];
         keys.forEach(key => { if (backup[key] !== undefined) pairs.push([key, typeof backup[key] === 'string' ? backup[key] : JSON.stringify(backup[key])]); });
-        if (pairs.length > 0) { await AsyncStorage.multiSet(pairs); loadSettings(); Alert.alert("Thành công", "Đã khôi phục dữ liệu!"); } 
-        else { Alert.alert("Thông báo", "Không có dữ liệu."); }
-      } else { Alert.alert("Trống", "Chưa có bản sao lưu."); }
-    } catch (error: any) { Alert.alert("Lỗi", "Không tải được."); } finally { setIsSyncing(false); }
+        
+        if (pairs.length > 0) { 
+            await AsyncStorage.multiSet(pairs); 
+            loadSettings(); 
+            Alert.alert("Thành công", "Đã khôi phục dữ liệu về máy!"); 
+        } else { Alert.alert("Thông báo", "Bản sao lưu trống rỗng."); }
+      } else { Alert.alert("Trống", "Không tìm thấy bản sao lưu nào trên mây."); }
+    } catch (error: any) { Alert.alert("Lỗi khôi phục", "Không tải được dữ liệu."); } finally { setIsSyncing(false); }
   };
 
   // --- LOGIC PICKER ---
@@ -180,6 +190,7 @@ export default function SettingsScreen() {
     else if (mode === 'timeNight') setTempDate(timeNight);
     else if (mode === 'timeOff') setTempDate(timeOff);
   };
+  
   const confirmPicker = () => {
     if (pickerMode === 'date') { setStartDate(tempDate); saveSettingItem('CYCLE_START_DATE', tempDate.toISOString()); }
     else if (pickerMode === 'timeDay') { setTimeDay(tempDate); saveSettingItem('TIME_DAY', tempDate.toISOString()); }
@@ -187,6 +198,7 @@ export default function SettingsScreen() {
     else if (pickerMode === 'timeOff') { setTimeOff(tempDate); saveSettingItem('TIME_OFF', tempDate.toISOString()); }
     setPickerMode('none');
   };
+  
   const onPickerChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
       setPickerMode('none');
@@ -271,7 +283,6 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* [PHẦN MỚI THÊM] QUẢN LÝ TAB */}
           <Text style={dynamicStyles.sectionTitle}>👁️ QUẢN LÝ TAB</Text>
           <View style={dynamicStyles.card}>
             {[
@@ -300,7 +311,6 @@ export default function SettingsScreen() {
             ))}
           </View>
 
-          {/* [PHẦN MỚI] CẤU HÌNH API KEY */}
           <Text style={dynamicStyles.sectionTitle}>🤖 CẤU HÌNH AI (GEMINI)</Text>
           <View style={dynamicStyles.card}>
              <View style={{padding: 10}}>
@@ -434,6 +444,5 @@ export default function SettingsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
-    //lolo
   );
 }
