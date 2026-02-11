@@ -11,7 +11,6 @@ import { GestureHandlerRootView, Swipeable, RectButton } from 'react-native-gest
 import * as WebBrowser from 'expo-web-browser';
 import { useFocusEffect } from 'expo-router';
 
-// Kích hoạt LayoutAnimation cho Android để list nhảy mượt hơn
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -23,19 +22,17 @@ type QuickNote = {
   title: string;
   content: string;
   date: string;
-  isPinned?: boolean; // [MỚI] Thêm trạng thái ghim
+  isPinned?: boolean;
 };
 
 export default function NotesScreen() {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  
   const [searchQuery, setSearchQuery] = useState('');
-
   const rowRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useFocusEffect(
@@ -49,32 +46,24 @@ export default function NotesScreen() {
       const data = await AsyncStorage.getItem('QUICK_NOTES');
       if (data) {
           let loadedNotes = JSON.parse(data);
-          // Sắp xếp lại khi load để đảm bảo pin luôn ở đầu
           loadedNotes = sortNotes(loadedNotes);
           setNotes(loadedNotes);
       }
     } catch (e) {}
   };
 
-  // [MỚI] Hàm sắp xếp: Đưa Pinned lên đầu
   const sortNotes = (list: QuickNote[]) => {
       return list.sort((a, b) => {
-          // Nếu a ghim mà b không ghim -> a lên trước (-1)
           if (a.isPinned && !b.isPinned) return -1;
-          // Nếu b ghim mà a không ghim -> b lên trước (1)
           if (!a.isPinned && b.isPinned) return 1;
-          // Còn lại giữ nguyên thứ tự (hoặc theo ngày nếu muốn)
           return 0;
       });
   };
 
   const saveNotes = async (newNotes: QuickNote[]) => {
     try {
-      // Luôn sắp xếp trước khi lưu
       const sortedNotes = sortNotes(newNotes);
       await AsyncStorage.setItem('QUICK_NOTES', JSON.stringify(sortedNotes));
-      
-      // Hiệu ứng chuyển động mượt mà
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setNotes(sortedNotes);
     } catch (e) {}
@@ -98,14 +87,11 @@ export default function NotesScreen() {
       setModalVisible(false); return;
     }
     let updatedNotes = [...notes];
-    
     if (editingId) {
-      // Khi sửa, giữ nguyên trạng thái isPinned cũ
       updatedNotes = updatedNotes.map(n => 
           n.id === editingId ? { ...n, title, content } : n
       );
     } else {
-      // Ghi chú mới mặc định không ghim
       const newNote = { 
           id: Date.now().toString(), 
           title, 
@@ -113,21 +99,17 @@ export default function NotesScreen() {
           date: new Date().toLocaleDateString('vi-VN'),
           isPinned: false 
       };
-      // Thêm vào đầu danh sách (nhưng sau các items đã Pin nhờ hàm sort ở saveNotes)
       updatedNotes = [newNote, ...updatedNotes];
     }
     saveNotes(updatedNotes);
     setModalVisible(false);
   };
 
-  // [MỚI] Hàm xử lý Ghim/Bỏ ghim
   const togglePin = (id: string) => {
       const updatedNotes = notes.map(n => 
           n.id === id ? { ...n, isPinned: !n.isPinned } : n
       );
       saveNotes(updatedNotes);
-      
-      // Đóng swipe nếu đang mở
       if (rowRefs.current.has(id)) {
           rowRefs.current.get(id)?.close();
       }
@@ -166,7 +148,6 @@ export default function NotesScreen() {
 
   const renderItem = ({ item }: { item: QuickNote }) => {
     const isLink = item.title.startsWith('http');
-
     const renderRightActions = (progress: any, dragX: any) => {
       const scale = dragX.interpolate({
         inputRange: [-100, 0],
@@ -191,20 +172,16 @@ export default function NotesScreen() {
           overshootRight={false}
           containerStyle={{borderRadius: 12, overflow: 'hidden'}} 
         >
-          {/* [ĐÃ SỬA] Bỏ viền đậm, chỉ giữ logic màu nền */}
           <View style={[
               styles.card, 
               { 
-                  // Vẫn giữ màu nền hơi khác chút để biết là đang ghim (nếu anh hai muốn bỏ luôn thì báo Tèo)
-                  backgroundColor: item.isPinned ? (colors.theme === 'dark' ? '#312e81' : '#EEF2FF') : colors.card, 
-                  // Viền về mặc định như các note khác
-                  borderColor: colors.border,
+                  // [SỬA] Dùng màu primary nhạt thay vì tím đậm
+                  backgroundColor: item.isPinned ? (theme === 'dark' ? colors.primary + '15' : colors.primary + '10') : colors.card, 
+                  borderColor: item.isPinned ? colors.primary : colors.border,
                   borderWidth: 1
               }
           ]}>
-            
             <View style={styles.titleSection}>
-               {/* Phần tiêu đề */}
                {isLink ? (
                   <TouchableOpacity onPress={() => handlePressLink(item.title)} style={{flex: 1}}>
                       <Text numberOfLines={1} style={[styles.cardTitle, { color: colors.primary, textDecorationLine: 'underline' }]}>
@@ -218,29 +195,21 @@ export default function NotesScreen() {
                     </Text>
                   </View>
                )}
-               
-               {/* Ngày tháng */}
                <Text style={{fontSize: 11, color: colors.subText, marginLeft: 10, marginRight: 10}}>{item.date}</Text>
-               
-               {/* [ĐÃ SỬA] Đổi icon từ push-pin thành pin */}
                <TouchableOpacity onPress={() => togglePin(item.id)} style={{padding: 4}}>
                    <Ionicons 
-                      // Đổi tên icon ở đây nha anh hai
                       name={item.isPinned ? "pin" : "pin-outline"} 
                       size={20} 
                       color={item.isPinned ? colors.primary : colors.subText} 
                    />
                </TouchableOpacity>
             </View>
-
             <View style={[styles.divider, {backgroundColor: colors.border}]} />
-
             <TouchableOpacity style={styles.contentSection} activeOpacity={0.7} onPress={() => handleOpenModal(item)}>
                <Text numberOfLines={2} style={{color: colors.subText, fontSize: 14, lineHeight: 20}}>
                   {item.content || 'Chạm vào đây để viết nội dung...'}
                </Text>
             </TouchableOpacity>
-
           </View>
         </Swipeable>
       </View>
@@ -250,8 +219,6 @@ export default function NotesScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaView style={{flex: 1}} edges={['top']}>
-        
-        {/* HEADER */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, {color: colors.text}]}>Ghi Chú 📝</Text>
           <TouchableOpacity onPress={() => handleOpenModal()} style={[styles.addBtn, {backgroundColor: colors.primary}]}>
@@ -259,7 +226,6 @@ export default function NotesScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* THANH TÌM KIẾM */}
         <View style={{paddingHorizontal: 20, marginBottom: 10}}>
             <View style={[styles.searchBar, {backgroundColor: colors.iconBg, borderColor: colors.border}]}>
                 <Ionicons name="search" size={20} color={colors.subText} />
@@ -303,11 +269,9 @@ export default function NotesScreen() {
               <ScrollView style={{ flex: 1 }}>
                 <Text style={[styles.label, {color: colors.subText}]}>Tiêu đề (hoặc Link):</Text>
                 <TextInput style={[styles.input, {backgroundColor: colors.iconBg, color: colors.text}]} placeholder="http://... hoặc Tiêu đề" placeholderTextColor={colors.subText} value={title} onChangeText={setTitle} />
-                
                 <Text style={[styles.label, {color: colors.subText}]}>Nội dung:</Text>
                 <TextInput style={[styles.input, {backgroundColor: colors.iconBg, color: colors.text, height: 200, textAlignVertical:'top'}]} placeholder="Chi tiết..." placeholderTextColor={colors.subText} multiline value={content} onChangeText={setContent} />
               </ScrollView>
-              
               <TouchableOpacity onPress={handleSave} style={[styles.saveBtn, {backgroundColor: colors.primary}]}>
                   <Text style={{color:'white', fontWeight:'bold'}}>Lưu lại</Text>
               </TouchableOpacity>
@@ -326,7 +290,7 @@ const styles = StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, marginBottom: 5 },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 15, height: 30 },
   noteWrapper: { marginBottom: 12 },
-  card: { },
+  card: { borderRadius: 12 },
   titleSection: { padding: 12, paddingBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: 'bold' },
   divider: { height: 1, width: '100%', opacity: 0.5 },

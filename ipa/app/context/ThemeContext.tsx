@@ -6,30 +6,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const themes = {
   light: {
     theme: 'light',
-    bg: '#F3F4F6',        // Xám rất nhạt (nền)
-    card: '#FFFFFF',      // Trắng tinh (thẻ)
-    text: '#111827',      // Đen than (chữ chính)
-    subText: '#6B7280',   // Xám vừa (chữ phụ)
-    border: '#E5E7EB',    // Viền nhạt
-    primary: '#2563EB',   // Xanh dương chủ đạo
-    iconBg: '#EFF6FF',    // Nền icon nhạt
-    success: '#10B981',   // Màu xanh lá
-    error: '#EF4444',     // Màu đỏ
-    inputBg: '#F9FAFB'    // Nền ô nhập liệu
+    bg: '#F8FAFC',        // Slate 50 (Sáng sủa, mát mắt)
+    card: '#FFFFFF',      // Trắng tinh
+    text: '#0F172A',      // Slate 900 (Đen xanh, dễ đọc)
+    subText: '#64748B',   // Slate 500
+    border: '#E2E8F0',    // Slate 200
+    primary: '#0284C7',   // Sky 600 (Xanh dương đậm đà)
+    iconBg: '#F1F5F9',    // Slate 100
+    success: '#10B981',   
+    error: '#EF4444',     
+    inputBg: '#F1F5F9'    
   },
   dark: {
     theme: 'dark',
-    // --- MÀU MỚI ĐÃ CHỈNH SỬA (DỊU MẮT HƠN) ---
-    bg: '#18181B',        // Xám đen (Zinc 900) - Không đen kịt
-    card: '#27272A',      // Xám đậm (Zinc 800) - Nổi bật trên nền
-    text: '#F4F4F5',      // Trắng đục (Zinc 100) - Đọc không chói
-    subText: '#A1A1AA',   // Xám bạc (Zinc 400)
-    border: '#3F3F46',    // Viền xám (Zinc 700)
-    primary: '#60A5FA',   // Xanh dương sáng hơn chút cho nổi trên nền tối
-    iconBg: '#3F3F46',    // Nền icon
-    success: '#34D399',   // Xanh lá sáng
-    error: '#F87171',     // Đỏ sáng
-    inputBg: '#27272A'    // Nền ô nhập liệu trùng màu card
+    // --- MÀU MỚI: TÔNG SLATE (XANH ĐEN) DỊU MẮT ---
+    bg: '#0F172A',        // Slate 900 (Nền tối thẫm, không đen kịt)
+    card: '#1E293B',      // Slate 800 (Thẻ sáng hơn nền chút)
+    text: '#F1F5F9',      // Slate 100 (Chữ trắng đục)
+    subText: '#94A3B8',   // Slate 400 (Chữ phụ xám xanh)
+    border: '#334155',    // Slate 700 (Viền nhẹ)
+    primary: '#38BDF8',   // Sky 400 (Xanh dương sáng, nổi trên nền tối)
+    iconBg: '#1E293B',    // Trùng màu card
+    success: '#34D399',   
+    error: '#F87171',     
+    inputBg: '#1E293B'    
   },
 };
 
@@ -40,6 +40,7 @@ type ThemeContextType = {
   setTheme: (theme: 'light' | 'dark') => void;
 };
 
+// @ts-ignore
 const ThemeContext = createContext<ThemeContextType>({
   theme: 'light',
   colors: themes.light,

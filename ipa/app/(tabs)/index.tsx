@@ -19,14 +19,12 @@ import * as Notifications from 'expo-notifications';
 import { Solar } from 'lunar-javascript';
 
 type NoteData = {
-  type: string; // 'ngay' | 'dem' | 'nghi' | ...
+  type: string;
   noteLines: string[];
 };
 
 const requestNotificationsPermissions = async () => {
-  // Trên Web thì bỏ qua vụ xin quyền này để đỡ lỗi
   if (Platform.OS === 'web') return;
-
   const { status } = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowBadge: true, allowSound: true },
     android: {}
@@ -35,20 +33,16 @@ const requestNotificationsPermissions = async () => {
 };
 
 export default function CalendarScreen() {
-  const { colors, theme } = useTheme();
+  const { colors, theme } = useTheme(); // Lấy màu từ Context chuẩn
   const [currentMonth, setCurrentMonth] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null); 
   const [modalVisible, setModalVisible] = useState(false);
   const [notes, setNotes] = useState<Record<string, NoteData>>({});
   const [cycleStartDate, setCycleStartDate] = useState<Date | null>(null);
-  
-  // [MỚI] Pattern chu kỳ làm việc
   const [cyclePattern, setCyclePattern] = useState<string[]>(['ngay', 'dem', 'nghi']);
-
   const [summaryMode, setSummaryMode] = useState<'date' | 'content'>('date');
   const [tempNotesList, setTempNotesList] = useState<string[]>([]);
   const [tempType, setTempType] = useState<string>('');
-  
   const [isNotifEnabled, setIsNotifEnabled] = useState(false);
   const [times, setTimes] = useState({
     ngay: new Date(new Date().setHours(6,0,0,0)),
@@ -62,33 +56,25 @@ export default function CalendarScreen() {
       const loadAllData = async () => {
         try {
           await requestNotificationsPermissions();
-          
           const savedDate = await AsyncStorage.getItem('CYCLE_START_DATE');
           if (savedDate) setCycleStartDate(new Date(savedDate));
-
           const savedNotes = await AsyncStorage.getItem('CALENDAR_NOTES');
           if (savedNotes) setNotes(JSON.parse(savedNotes));
-
           const savedEnabled = await AsyncStorage.getItem('NOTIF_ENABLED');
           if (savedEnabled) setIsNotifEnabled(JSON.parse(savedEnabled));
-
-          // [MỚI] Load Pattern chu kỳ
           const savedPattern = await AsyncStorage.getItem('WORK_CYCLE_PATTERN');
           if (savedPattern) setCyclePattern(JSON.parse(savedPattern));
-          else setCyclePattern(['ngay', 'dem', 'nghi']); // Mặc định nếu chưa có
-
+          
           const tDay = await AsyncStorage.getItem('TIME_DAY');
           const tNight = await AsyncStorage.getItem('TIME_NIGHT');
           const tOff = await AsyncStorage.getItem('TIME_OFF');
           const tNormal = await AsyncStorage.getItem('TIME_NORMAL');
-
           setTimes({
             ngay: tDay ? new Date(tDay) : new Date(new Date().setHours(6,0,0,0)),
             dem: tNight ? new Date(tNight) : new Date(new Date().setHours(18,0,0,0)),
             nghi: tOff ? new Date(tOff) : new Date(new Date().setHours(8,0,0,0)),
             normal: tNormal ? new Date(tNormal) : new Date(new Date().setHours(7,0,0,0)),
           });
-
         } catch (e) { console.log('Lỗi load:', e); }
       };
       loadAllData();
@@ -96,9 +82,7 @@ export default function CalendarScreen() {
   );
 
   const scheduleAutoNotification = async (date: Date, lines: string[], type: string) => {
-    // [FIX QUAN TRỌNG] Nếu là Web thì thoát luôn, không gọi hàm thông báo
     if (Platform.OS === 'web') return;
-
     if (!isNotifEnabled) return;
     let selectedTime = times.normal;
     let prefixTitle = "Ghi chú";
@@ -116,15 +100,11 @@ export default function CalendarScreen() {
     }
   };
 
-  // [MỚI] Logic tính toán dựa trên pattern động
   const calculateAutoShift = (targetDate: Date) => {
     if (!cycleStartDate || cyclePattern.length === 0) return null;
     const diff = differenceInCalendarDays(targetDate, cycleStartDate);
-    
-    // Logic toán học để xử lý số âm và modulo theo độ dài mảng pattern
     const patternLength = cyclePattern.length;
     const remainder = ((diff % patternLength) + patternLength) % patternLength;
-    
     return cyclePattern[remainder];
   };
 
@@ -150,15 +130,12 @@ export default function CalendarScreen() {
     setSelectedDate(date);
     const dateKey = format(date, 'yyyy-MM-dd');
     const manualData = notes[dateKey];
-    
-    // [FIX LOGIC] Nếu đã có dữ liệu cũ thì ưu tiên hiển thị nó, không tính toán lại
     if (manualData && manualData.type) {
         setTempType(manualData.type);
     } else {
         const autoType = calculateAutoShift(date);
         setTempType(autoType || ''); 
     }
-    
     setTempNotesList(manualData?.noteLines?.length ? [...manualData.noteLines] : ['']);
     setModalVisible(true);
   };
@@ -171,38 +148,23 @@ export default function CalendarScreen() {
     const newList = [...tempNotesList]; newList.splice(index, 1); setTempNotesList(newList);
   };
 
-  // [HÀM ĐÃ SỬA LỖI]
   const handleSave = async () => {
     if (selectedDate) {
       const dateKey = format(selectedDate, 'yyyy-MM-dd');
       let newNotes = { ...notes };
       const cleanLines = tempNotesList.filter(line => line.trim() !== '');
-
-      // 1. Cập nhật dữ liệu vào biến State trước
       if (cleanLines.length === 0) {
         delete newNotes[dateKey];
       } else {
         newNotes[dateKey] = { type: tempType, noteLines: cleanLines };
       }
       setNotes(newNotes);
-
-      // 2. Đóng Modal NGAY LẬP TỨC để giao diện phản hồi nhanh
       setModalVisible(false);
-
-      // 3. Lưu vào bộ nhớ máy (AsyncStorage)
       try {
         await AsyncStorage.setItem('CALENDAR_NOTES', JSON.stringify(newNotes));
-      } catch (e) {
-        console.log("Lỗi lưu bộ nhớ:", e);
-      }
-
-      // 4. Xử lý thông báo sau cùng (Tách biệt ra, có lỗi cũng không ảnh hưởng việc lưu)
+      } catch (e) { console.log("Lỗi lưu:", e); }
       if (cleanLines.length > 0) {
-        try {
-           await scheduleAutoNotification(selectedDate, cleanLines, tempType);
-        } catch (err) {
-           console.log("Lỗi tạo thông báo (nhưng dữ liệu đã được lưu):", err);
-        }
+        try { await scheduleAutoNotification(selectedDate, cleanLines, tempType); } catch (err) {}
       }
     }
   };
@@ -252,10 +214,15 @@ export default function CalendarScreen() {
   const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
   const summaryListDate = getNotesByDate();
   const summaryListContent = getNotesByContent();
-  const gridBorderColor = theme === 'dark' ? 'rgba(255,255,255,0.15)' : '#E5E7EB';
+  
+  // Dùng màu border từ theme
+  const gridBorderColor = colors.border;
+
+  // Tạo mảng màu cho Gradient từ theme (bg và card) để tạo độ sâu nhẹ
+  const bgColors = [colors.bg, colors.bg] as [string, string, ...string[]];
 
   return (
-    <LinearGradient colors={theme === 'dark' ? ['#2e1065', '#0f172a'] : ['#F8FAFC', '#F8FAFC']} style={{flex: 1}}>
+    <LinearGradient colors={bgColors} style={{flex: 1}}>
       <SafeAreaView style={{flex: 1}} edges={['top']}>
         <ScrollView contentContainerStyle={{ paddingBottom: 80, paddingTop: 10 }}>
           
@@ -270,15 +237,20 @@ export default function CalendarScreen() {
             <View style={styles.weekHeaderRow}>
               {weekDays.map((day, index) => {
                 const isSunday = index === 6;
-                const normalDayBg = theme === 'dark' ? 'rgba(56, 189, 248, 0.15)' : '#E0F2FE'; 
-                const normalDayBorder = theme === 'dark' ? 'rgba(56, 189, 248, 0.5)' : '#BAE6FD'; 
-                const normalDayText = theme === 'dark' ? '#BAE6FD' : '#0369A1'; 
+                // Màu nền nhẹ hơn primary một chút cho tiêu đề
+                const normalDayBg = theme === 'dark' ? colors.primary + '15' : colors.primary + '15'; 
+                const normalDayBorder = theme === 'dark' ? colors.primary + '40' : colors.primary + '40'; 
+                const normalDayText = theme === 'dark' ? colors.primary : colors.primary; 
+                
+                const sundayBg = theme === 'dark' ? colors.error + '15' : colors.error + '15';
+                const sundayBorder = theme === 'dark' ? colors.error + '40' : colors.error + '40';
+
                 return (
                   <View key={index} style={[styles.headerCell, {
-                        backgroundColor: isSunday ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2') : normalDayBg, 
-                        borderColor: isSunday ? '#EF4444' : normalDayBorder, borderWidth: 1, borderRadius: 8, marginHorizontal: 2 
+                        backgroundColor: isSunday ? sundayBg : normalDayBg, 
+                        borderColor: isSunday ? sundayBorder : normalDayBorder, borderWidth: 1, borderRadius: 8, marginHorizontal: '0.3%' 
                   }]}>
-                    <Text style={[styles.weekText, { color: isSunday ? '#EF4444' : normalDayText }]}>{day}</Text>
+                    <Text style={[styles.weekText, { color: isSunday ? colors.error : normalDayText }]}>{day}</Text>
                   </View>
                 );
               })}
@@ -291,7 +263,7 @@ export default function CalendarScreen() {
                 const lunarInfo = getLunarInfo(day);
                 const manualData = notes[dateKey];
                 const autoType = calculateAutoShift(day);
-                const displayType = manualData?.type || autoType; // Hiển thị theo chu kỳ động
+                const displayType = manualData?.type || autoType; 
                 const displayLines = manualData?.noteLines || [];
                 const isToday = isSameDay(day, new Date());
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
@@ -303,16 +275,18 @@ export default function CalendarScreen() {
                 if (isSelected) {
                     cellBg = colors.primary + '20'; currentBorderColor = colors.primary; currentBorderWidth = 2;
                 } else if (isToday) {
-                    cellBg = theme === 'dark' ? 'rgba(253, 224, 71, 0.15)' : '#FEF9C3'; currentBorderColor = '#F59E0B'; currentBorderWidth = 1;
+                    // Màu vàng nhẹ cho ngày hiện tại (hardcode nhẹ vì màu này đặc thù)
+                    cellBg = theme === 'dark' ? '#FEF08A20' : '#FEF9C3'; 
+                    currentBorderColor = '#EAB308'; currentBorderWidth = 1;
                 } else if (displayType === 'nghi') {
-                    cellBg = theme === 'dark' ? 'rgba(255,255,255,0.05)' : '#F8FAFC';
+                    cellBg = theme === 'dark' ? '#FFFFFF05' : '#F1F5F9';
                 }
 
                 return (
                   <TouchableOpacity key={index} style={[styles.cell, { backgroundColor: cellBg, borderColor: currentBorderColor, borderWidth: currentBorderWidth }]} onPress={() => handlePressDay(day)}>
                     <View style={styles.cellHeader}>
                       <Text style={[styles.solarText, { color: isCurrentMonth ? colors.text : colors.subText, fontWeight: isToday ? 'bold' : 'normal' }]}>{format(day, 'd')}</Text>
-                      <Text style={[styles.lunarText, {color: colors.subText}, lunarInfo.isFirstDay && {color: '#EF4444', fontWeight: 'bold'}]}>{lunarInfo.text}</Text>
+                      <Text style={[styles.lunarText, {color: colors.subText}, lunarInfo.isFirstDay && {color: colors.error, fontWeight: 'bold'}]}>{lunarInfo.text}</Text>
                     </View>
                     <View style={{marginTop: 4, flex: 1}}> 
                       {displayLines.slice(0, 3).map((line, i) => (<Text key={i} numberOfLines={1} style={{fontSize: 8.5, color: colors.text, marginBottom: 1, fontWeight: '500'}}>{line}</Text>))}
@@ -410,7 +384,7 @@ export default function CalendarScreen() {
                       value={note} onChangeText={(text) => handleChangeNoteLine(text, index)} 
                     />
                     <TouchableOpacity onPress={() => handleDeleteNoteLine(index)} style={{marginLeft: 10, padding: 5}}>
-                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                        <Ionicons name="trash-outline" size={20} color={colors.error} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -429,8 +403,10 @@ const styles = StyleSheet.create({
   calendarContainer: { marginHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 0, paddingBottom: 5 },
   monthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   monthTitle: { fontSize: 20, fontWeight: 'bold' },
-  weekHeaderRow: { flexDirection: 'row', marginBottom: 10, paddingHorizontal: 5 },
-  headerCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+  // Layout chuẩn: paddingHorizontal 2 để khớp margin 0.3%
+  weekHeaderRow: { flexDirection: 'row', marginBottom: 10, paddingHorizontal: 2 },
+  // Layout chuẩn: width 13.5%
+  headerCell: { width: '13.5%', marginHorizontal: '0.3%', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   weekText: { fontWeight: 'bold', fontSize: 13 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 2 },
   cell: { width: '13.5%', height: 95, margin: '0.3%', borderRadius: 14, padding: 4, position: 'relative' },

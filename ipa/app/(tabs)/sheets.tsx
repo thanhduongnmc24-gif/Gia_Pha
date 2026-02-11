@@ -26,7 +26,6 @@ export default function SheetsScreen() {
   const [textList, setTextList] = useState<TextItem[]>([{ id: '1', cell: '', content: '' }]);
   const [imageList, setImageList] = useState<ImageItem[]>([{ id: '1', cell: '', uri: '', base64: null }]);
 
-  // Load URL
   useEffect(() => {
     AsyncStorage.getItem('SHEET_API_URL').then(url => { if(url) setWebhookUrl(url); });
   }, []);
@@ -37,7 +36,6 @@ export default function SheetsScreen() {
       Alert.alert("Đã lưu", "Cấu hình đã được lưu!");
   }
 
-  // --- LOGIC TEXT ---
   const addTextItem = () => {
     setTextList([...textList, { id: Date.now().toString(), cell: '', content: '' }]);
   };
@@ -49,7 +47,6 @@ export default function SheetsScreen() {
     setTextList(textList.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  // --- LOGIC IMAGE ---
   const addImageItem = () => {
     setImageList([...imageList, { id: Date.now().toString(), cell: '', uri: '', base64: null }]);
   };
@@ -77,7 +74,6 @@ export default function SheetsScreen() {
     }
   };
 
-  // --- GỬI DỮ LIỆU ---
   const handleUpload = async () => {
     if (!webhookUrl) return Alert.alert("Lỗi", "Chưa có Link Script!");
     
@@ -111,36 +107,26 @@ export default function SheetsScreen() {
     }
   };
 
-  // --- STYLES ---
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
     fixedHeader: { backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 100 },
     sectionTitle: { fontSize: 14, fontWeight: 'bold', color: colors.primary, marginTop: 20, marginBottom: 10, textTransform: 'uppercase' },
-    
-    // Card chứa cụm nhập liệu
     itemCard: { 
       backgroundColor: colors.card, padding: 15, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 15 
     },
-    
-    // Hàng tiêu đề của Card (Chứa ô Cell + Nút xóa)
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-    
-    // Ô nhập Cell (A1, B2...)
     inputCell: { 
       width: 80, height: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 8, 
       textAlign: 'center', fontWeight: 'bold', color: colors.text, backgroundColor: colors.inputBg, fontSize: 16
     },
-    
-    // Ô nhập Nội dung (TO RA NHƯ ANH MUỐN)
     inputContentLarge: { 
       width: '100%', height: 100, // Cao 100px tha hồ viết
       borderWidth: 1, borderColor: colors.border, borderRadius: 8, 
       padding: 12, color: colors.text, backgroundColor: colors.inputBg, 
-      textAlignVertical: 'top', // Chữ bắt đầu từ trên cùng
+      textAlignVertical: 'top', 
       fontSize: 16
     },
-    
     addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderStyle: 'dashed', borderWidth: 1, borderColor: colors.subText, borderRadius: 10, marginTop: 5 },
     sendBtn: {
       backgroundColor: isUploading ? colors.subText : colors.primary, 
@@ -153,8 +139,6 @@ export default function SheetsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        
-        {/* HEADER CỐ ĐỊNH */}
         <View style={styles.fixedHeader}>
             <View style={styles.headerRow}>
                 <Text style={{fontSize: 24, fontWeight: 'bold', color: colors.text}}>Sheets 📊</Text>
@@ -165,7 +149,7 @@ export default function SheetsScreen() {
 
             {showConfig && (
                 <View style={{padding: 10, backgroundColor: colors.card, marginHorizontal: 20, marginBottom: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border}}>
-                   <TextInput style={{color: colors.text, borderBottomWidth:1, borderColor:colors.border, marginBottom:10}} value={webhookUrl} onChangeText={setWebhookUrl} placeholder="Script URL" />
+                   <TextInput style={{color: colors.text, borderBottomWidth:1, borderColor:colors.border, marginBottom:10}} value={webhookUrl} onChangeText={setWebhookUrl} placeholder="Script URL" placeholderTextColor={colors.subText}/>
                    <TouchableOpacity onPress={saveUrl} style={{alignItems:'center'}}><Text style={{color: colors.primary, fontWeight:'bold'}}>Lưu</Text></TouchableOpacity>
                 </View>
             )}
@@ -180,15 +164,10 @@ export default function SheetsScreen() {
             </TouchableOpacity>
         </View>
 
-        {/* SCROLL VIEW */}
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 50 }}>
-          
-          {/* --- DANH SÁCH TEXT --- */}
           <Text style={styles.sectionTitle}>📝 Nội Dung Chữ</Text>
-          
           {textList.map((item, index) => (
             <View key={item.id} style={styles.itemCard}>
-                {/* Hàng trên: Vị trí ô + Nút xóa */}
                 <View style={styles.cardHeader}>
                     <View style={{flexDirection: 'row', alignItems: 'center'}}>
                         <Text style={{color: colors.subText, marginRight: 8, fontWeight:'bold'}}>Vị trí:</Text>
@@ -203,13 +182,12 @@ export default function SheetsScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {/* Hàng dưới: Ô nhập nội dung to đùng */}
                 <Text style={{color: colors.subText, marginBottom: 5, fontSize: 12}}>Nội dung chi tiết:</Text>
                 <TextInput 
                     style={styles.inputContentLarge} 
                     placeholder="Nhập nội dung dài vào đây..." placeholderTextColor={colors.subText}
                     value={item.content} onChangeText={(val) => updateTextItem(item.id, 'content', val)}
-                    multiline={true} // Cho phép xuống dòng
+                    multiline={true} 
                 />
             </View>
           ))}
@@ -219,7 +197,6 @@ export default function SheetsScreen() {
               <Text style={{color: colors.primary, fontWeight: 'bold', marginLeft: 5}}>Thêm ô Text mới</Text>
           </TouchableOpacity>
 
-          {/* --- DANH SÁCH ẢNH --- */}
           <Text style={[styles.sectionTitle, {marginTop: 30}]}>📸 Hình Ảnh</Text>
           
           {imageList.map((item, index) => (

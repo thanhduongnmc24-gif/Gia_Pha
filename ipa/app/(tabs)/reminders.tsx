@@ -13,14 +13,12 @@ import { GestureHandlerRootView, Swipeable, RectButton } from 'react-native-gest
 import * as Notifications from 'expo-notifications';
 import * as Speech from 'expo-speech';
 
-// Kích hoạt LayoutAnimation cho Android
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 }
 
-// Cấu hình thông báo
 Notifications.setNotificationHandler({
   // @ts-ignore
   handleNotification: async () => ({
@@ -41,15 +39,12 @@ export default function RemindersScreen() {
   const { colors, theme } = useTheme();
   const [reminders, setReminders] = useState<ReminderEvent[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [date, setDate] = useState(new Date());
-  
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
-
   const rowRefs = useRef<Map<string, Swipeable>>(new Map());
 
   useEffect(() => { 
@@ -59,14 +54,9 @@ export default function RemindersScreen() {
 
   const requestPermissions = async () => {
     const { status } = await Notifications.requestPermissionsAsync({
-      ios: {
-        allowAlert: true,
-        allowBadge: true,
-        allowSound: true,
-      },
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
       android: {}
     });
-
     if (status !== 'granted') {
         Alert.alert('Cần quyền', 'Đại ca ơi, bật quyền thông báo cho Tèo nhé!');
     }
@@ -89,11 +79,7 @@ export default function RemindersScreen() {
   const scheduleLocalNotification = async (remTitle: string, remContent: string, remDate: Date) => {
     if (remDate.getTime() > new Date().getTime()) {
       await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `🔔 ${remTitle}`,
-          body: remContent || 'Đến giờ hẹn rồi đại ca ơi!',
-          sound: true, 
-        },
+        content: { title: `🔔 ${remTitle}`, body: remContent || 'Đến giờ hẹn rồi đại ca ơi!', sound: true },
         // @ts-ignore
         trigger: remDate, 
       });
@@ -105,9 +91,7 @@ export default function RemindersScreen() {
       Alert.alert("Thiếu thông tin", "Nhập tiêu đề đi đại ca!");
       return;
     }
-
     let updatedList = [...reminders];
-
     if (editingId) {
       updatedList = updatedList.map(item => 
         item.id === editingId 
@@ -125,7 +109,6 @@ export default function RemindersScreen() {
       updatedList = [newReminder, ...updatedList];
       await scheduleLocalNotification(title, content, date);
     }
-
     await saveReminders(updatedList);
     setModalVisible(false);
   };
@@ -262,12 +245,9 @@ export default function RemindersScreen() {
               <ScrollView style={{flex: 1}}>
                 <Text style={dynamicStyles.label}>Tiêu đề:</Text>
                 <TextInput style={dynamicStyles.input} placeholder="VD: Đi họp..." placeholderTextColor={colors.subText} value={title} onChangeText={setTitle} />
-
                 <Text style={dynamicStyles.label}>Nội dung:</Text>
                 <TextInput style={[dynamicStyles.input, {height: 80, textAlignVertical: 'top'}]} placeholder="Chi tiết..." placeholderTextColor={colors.subText} multiline value={content} onChangeText={setContent} />
-
                 <Text style={dynamicStyles.label}>Thời gian:</Text>
-                
                 <View style={styles.dateTimeRow}>
                   <TouchableOpacity 
                     onPress={() => togglePicker('date')} 
@@ -279,7 +259,6 @@ export default function RemindersScreen() {
                       <Text style={{color: colors.text, fontWeight:'bold'}}>{format(date, 'dd/MM/yyyy')}</Text>
                       <Ionicons name="calendar-outline" size={18} color={colors.subText} style={{marginTop:4}}/>
                   </TouchableOpacity>
-                  
                   <TouchableOpacity 
                     onPress={() => togglePicker('time')} 
                     style={[
@@ -291,7 +270,6 @@ export default function RemindersScreen() {
                       <Ionicons name="time-outline" size={18} color={colors.subText} style={{marginTop:4}}/>
                   </TouchableOpacity>
                 </View>
-
                 {showPicker && (
                     <View style={{alignItems: 'center', paddingBottom: 20}}>
                         <DateTimePicker 
@@ -312,9 +290,7 @@ export default function RemindersScreen() {
                         )}
                     </View>
                 )}
-
               </ScrollView>
-
               <TouchableOpacity style={[styles.saveBtn, dynamicStyles.btn]} onPress={handleSaveReminder}>
                 <Text style={styles.saveBtnText}>Lưu & Hẹn giờ</Text>
               </TouchableOpacity>
