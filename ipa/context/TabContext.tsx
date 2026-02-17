@@ -1,13 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Định nghĩa các Tab có thể tắt/bật (Trừ tab Cài đặt ra nhé)
+// Tèo đã xóa hết mấy cái tab cũ, giờ chỉ để trống để chờ sau này anh cần thêm tính năng gì thì thêm
 type TabState = {
-  calendar: boolean; // Tab Lịch (index)
-  notes: boolean;    // Tab Ghi chú
-  sheets: boolean;   // Tab Trang tính
-  media: boolean;    // Tab Media
-  reminders: boolean;// Tab Nhắc nhở
+  // Hiện tại chưa cần ẩn hiện gì cả vì Gia phả là chính
+  isReady: boolean; 
 };
 
 type TabContextType = {
@@ -16,34 +13,26 @@ type TabContextType = {
 };
 
 const TabContext = createContext<TabContextType>({
-  tabState: { calendar: true, notes: true, sheets: true, media: true, reminders: true },
+  tabState: { isReady: true },
   toggleTab: () => {},
 });
 
 export const TabProvider = ({ children }: { children: React.ReactNode }) => {
-  // Mặc định là hiện tất cả (true)
   const [tabState, setTabState] = useState<TabState>({
-    calendar: true,
-    notes: true,
-    sheets: true,
-    media: true,
-    reminders: true,
+    isReady: true,
   });
 
-  // Load cấu hình đã lưu khi mở app
+  // Giữ lại hàm load này cho vui, sau này dùng lưu setting khác
   useEffect(() => {
     AsyncStorage.getItem('TAB_CONFIG').then((saved) => {
       if (saved) {
-        setTabState(JSON.parse(saved));
+        // Code cũ, cứ để đó tính sau
       }
     });
   }, []);
 
-  // Hàm bật/tắt
   const toggleTab = async (key: keyof TabState) => {
-    const newState = { ...tabState, [key]: !tabState[key] };
-    setTabState(newState);
-    await AsyncStorage.setItem('TAB_CONFIG', JSON.stringify(newState));
+    // Tạm thời chưa làm gì cả
   };
 
   return (

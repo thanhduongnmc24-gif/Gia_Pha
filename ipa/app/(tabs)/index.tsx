@@ -1,435 +1,389 @@
-import React, { useState, useCallback } from 'react';
-import { 
-  StyleSheet, Text, View, TouchableOpacity, ScrollView, 
-  Modal, TextInput, KeyboardAvoidingView, Platform 
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// ipa/app/(tabs)/index.tsx
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, Platform } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { 
-  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, 
-  eachDayOfInterval, addMonths, subMonths, isSameDay, isSameMonth, 
-  differenceInCalendarDays, setHours, setMinutes 
-} from 'date-fns';
-import { useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '../context/ThemeContext';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from 'expo-notifications';
-// @ts-ignore
-import { Solar } from 'lunar-javascript';
+import { supabase } from '../../utils/supabaseConfig';
 
-type NoteData = {
-  type: string;
-  noteLines: string[];
-};
+// --- CẤU HÌNH KÍCH THƯỚC ---
+const CARD_WIDTH = 100;
+const CARD_HEIGHT = 50; // Tăng chiều cao để hiện thêm vai vế
+const SPACING = 20;
 
-const requestNotificationsPermissions = async () => {
-  if (Platform.OS === 'web') return;
-  const { status } = await Notifications.requestPermissionsAsync({
-    ios: { allowAlert: true, allowBadge: true, allowSound: true },
-    android: {}
-  });
-  if (status !== 'granted') console.log('Chưa có quyền thông báo.');
-};
-
-export default function CalendarScreen() {
-  const { colors, theme } = useTheme(); // Lấy màu từ Context chuẩn
-  const [currentMonth, setCurrentMonth] = useState(new Date()); 
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null); 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [notes, setNotes] = useState<Record<string, NoteData>>({});
-  const [cycleStartDate, setCycleStartDate] = useState<Date | null>(null);
-  const [cyclePattern, setCyclePattern] = useState<string[]>(['ngay', 'dem', 'nghi']);
-  const [summaryMode, setSummaryMode] = useState<'date' | 'content'>('date');
-  const [tempNotesList, setTempNotesList] = useState<string[]>([]);
-  const [tempType, setTempType] = useState<string>('');
-  const [isNotifEnabled, setIsNotifEnabled] = useState(false);
-  const [times, setTimes] = useState({
-    ngay: new Date(new Date().setHours(6,0,0,0)),
-    dem: new Date(new Date().setHours(18,0,0,0)),
-    nghi: new Date(new Date().setHours(8,0,0,0)),
-    normal: new Date(new Date().setHours(7,0,0,0)),
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      const loadAllData = async () => {
-        try {
-          await requestNotificationsPermissions();
-          const savedDate = await AsyncStorage.getItem('CYCLE_START_DATE');
-          if (savedDate) setCycleStartDate(new Date(savedDate));
-          const savedNotes = await AsyncStorage.getItem('CALENDAR_NOTES');
-          if (savedNotes) setNotes(JSON.parse(savedNotes));
-          const savedEnabled = await AsyncStorage.getItem('NOTIF_ENABLED');
-          if (savedEnabled) setIsNotifEnabled(JSON.parse(savedEnabled));
-          const savedPattern = await AsyncStorage.getItem('WORK_CYCLE_PATTERN');
-          if (savedPattern) setCyclePattern(JSON.parse(savedPattern));
-          
-          const tDay = await AsyncStorage.getItem('TIME_DAY');
-          const tNight = await AsyncStorage.getItem('TIME_NIGHT');
-          const tOff = await AsyncStorage.getItem('TIME_OFF');
-          const tNormal = await AsyncStorage.getItem('TIME_NORMAL');
-          setTimes({
-            ngay: tDay ? new Date(tDay) : new Date(new Date().setHours(6,0,0,0)),
-            dem: tNight ? new Date(tNight) : new Date(new Date().setHours(18,0,0,0)),
-            nghi: tOff ? new Date(tOff) : new Date(new Date().setHours(8,0,0,0)),
-            normal: tNormal ? new Date(tNormal) : new Date(new Date().setHours(7,0,0,0)),
-          });
-        } catch (e) { console.log('Lỗi load:', e); }
-      };
-      loadAllData();
-    }, [])
-  );
-
-  const scheduleAutoNotification = async (date: Date, lines: string[], type: string) => {
-    if (Platform.OS === 'web') return;
-    if (!isNotifEnabled) return;
-    let selectedTime = times.normal;
-    let prefixTitle = "Ghi chú";
-    if (type === 'ngay') { selectedTime = times.ngay; prefixTitle = "Ca Ngày"; }
-    else if (type === 'dem') { selectedTime = times.dem; prefixTitle = "Ca Đêm"; }
-    else if (type === 'nghi') { selectedTime = times.nghi; prefixTitle = "Ngày Nghỉ"; }
-
-    const triggerDate = setMinutes(setHours(date, selectedTime.getHours()), selectedTime.getMinutes());
-    if (triggerDate.getTime() > new Date().getTime()) {
-      await Notifications.scheduleNotificationAsync({
-        content: { title: `🔔 Lịch: ${prefixTitle}`, body: lines.join('\n'), sound: true },
-        // @ts-ignore
-        trigger: triggerDate,
-      });
-    }
-  };
-
-  const calculateAutoShift = (targetDate: Date) => {
-    if (!cycleStartDate || cyclePattern.length === 0) return null;
-    const diff = differenceInCalendarDays(targetDate, cycleStartDate);
-    const patternLength = cyclePattern.length;
-    const remainder = ((diff % patternLength) + patternLength) % patternLength;
-    return cyclePattern[remainder];
-  };
-
-  const getLunarInfo = (date: Date) => {
-    try {
-      const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
-      const lunar = solar.getLunar();
-      if (lunar.getDay() === 1) return { text: `${lunar.getDay()}/${lunar.getMonth()}`, isFirstDay: true };
-      return { text: `${lunar.getDay()}`, isFirstDay: false };
-    } catch (e) { return { text: '', isFirstDay: false }; }
-  };
-
-  const renderIcon = (type: string, size: number = 12) => {
-    switch (type) {
-      case 'ngay': return <Ionicons name="sunny" size={size} color={theme === 'dark' ? "#FDB813" : "#F59E0B"} />;
-      case 'dem': return <Ionicons name="moon" size={size} color={theme === 'dark' ? "#2DD4BF" : "#6366F1"} />;
-      case 'nghi': return <Ionicons name="cafe" size={size} color={theme === 'dark' ? "#FDA4AF" : "#78350F"} />;
-      default: return null;
-    }
-  };
-
-  const handlePressDay = (date: Date) => {
-    setSelectedDate(date);
-    const dateKey = format(date, 'yyyy-MM-dd');
-    const manualData = notes[dateKey];
-    if (manualData && manualData.type) {
-        setTempType(manualData.type);
-    } else {
-        const autoType = calculateAutoShift(date);
-        setTempType(autoType || ''); 
-    }
-    setTempNotesList(manualData?.noteLines?.length ? [...manualData.noteLines] : ['']);
-    setModalVisible(true);
-  };
-
-  const handleAddNoteLine = () => setTempNotesList([...tempNotesList, '']);
-  const handleChangeNoteLine = (text: string, index: number) => {
-    const newList = [...tempNotesList]; newList[index] = text; setTempNotesList(newList);
-  };
-  const handleDeleteNoteLine = (index: number) => {
-    const newList = [...tempNotesList]; newList.splice(index, 1); setTempNotesList(newList);
-  };
-
-  const handleSave = async () => {
-    if (selectedDate) {
-      const dateKey = format(selectedDate, 'yyyy-MM-dd');
-      let newNotes = { ...notes };
-      const cleanLines = tempNotesList.filter(line => line.trim() !== '');
-      if (cleanLines.length === 0) {
-        delete newNotes[dateKey];
-      } else {
-        newNotes[dateKey] = { type: tempType, noteLines: cleanLines };
-      }
-      setNotes(newNotes);
-      setModalVisible(false);
-      try {
-        await AsyncStorage.setItem('CALENDAR_NOTES', JSON.stringify(newNotes));
-      } catch (e) { console.log("Lỗi lưu:", e); }
-      if (cleanLines.length > 0) {
-        try { await scheduleAutoNotification(selectedDate, cleanLines, tempType); } catch (err) {}
-      }
-    }
-  };
-
-  const getNotesByDate = () => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    return eachDayOfInterval({ start, end }).map(day => {
-      const dateKey = format(day, 'yyyy-MM-dd');
-      const data = notes[dateKey];
-      if (data?.noteLines?.length > 0) return { date: day, noteLines: data.noteLines };
-      return null;
-    }).filter(item => item !== null) as { date: Date, noteLines: string[] }[];
-  };
-
-  const getNotesByContent = () => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const byDateList = eachDayOfInterval({ start, end }).map(day => {
-      const dateKey = format(day, 'yyyy-MM-dd');
-      const data = notes[dateKey];
-      if (data?.noteLines?.length > 0) return { date: day, noteLines: data.noteLines };
-      return null;
-    }).filter(item => item !== null) as { date: Date, noteLines: string[] }[];
-
-    const aggregator: Record<string, string[]> = {};
-    byDateList.forEach(item => {
-      const dayStr = format(item.date, 'd'); 
-      item.noteLines.forEach(line => {
-        const parts = line.split(/[,;]+/); 
-        parts.forEach(part => {
-          const key = part.trim(); 
-          if (key) {
-            if (!aggregator[key]) aggregator[key] = [];
-            if (!aggregator[key].includes(dayStr)) aggregator[key].push(dayStr);
-          }
-        });
-      });
-    });
-    return Object.keys(aggregator).map(key => ({ name: key, days: aggregator[key].join(', ') }));
-  };
-
-  const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 }),
-    end: endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 })
-  });
-  const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-  const summaryListDate = getNotesByDate();
-  const summaryListContent = getNotesByContent();
+type Member = {
+  id: string;
+  full_name: string;
+  gender: string;
+  birth_date: string;
+  bio: string;
+  father_id: string | null;
+  mother_id: string | null;
+  wife_husband_id: string | null;
+  children?: Member[];
+  spouse?: Member;
   
-  // Dùng màu border từ theme
-  const gridBorderColor = colors.border;
+  // Thuộc tính tính toán quan hệ
+  relation?: string; // Vai vế đối với người được chọn làm Gốc
+  generation?: number; // Đời thứ mấy (0: Gốc, -1: Cha, -2: Ông, 1: Con...)
+};
 
-  // Tạo mảng màu cho Gradient từ theme (bg và card) để tạo độ sâu nhẹ
-  const bgColors = [colors.bg, colors.bg] as [string, string, ...string[]];
+export default function FamilyTreeScreen() {
+  const { colors } = useTheme();
+  const [treeData, setTreeData] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [modalType, setModalType] = useState<'DETAIL' | 'ADD_CHILD' | 'ADD_SPOUSE' | 'EDIT' | null>(null);
+  const [formData, setFormData] = useState({ fullName: '', gender: 'Nam', birthDate: '', bio: '' });
 
-  return (
-    <LinearGradient colors={bgColors} style={{flex: 1}}>
-      <SafeAreaView style={{flex: 1}} edges={['top']}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 80, paddingTop: 10 }}>
+  // Người được chọn làm GỐC để tính quan hệ
+  const [rootPersonId, setRootPersonId] = useState<string | null>(null);
+
+  // --- 1. LOGIC TÍNH TOÁN QUAN HỆ (Huyết thống 3 đời) ---
+  const calculateRelations = (members: Member[], rootId: string | null) => {
+      if (!rootId) return members; // Nếu chưa chọn ai làm gốc thì trả về bình thường
+
+      const map: Record<string, Member> = {};
+      members.forEach(m => map[m.id] = {...m, relation: '', generation: 999});
+      
+      const root = map[rootId];
+      if (!root) return members;
+
+      // Đặt gốc
+      root.relation = 'Tôi';
+      root.generation = 0;
+
+      // 1. Tìm ngược lên (Bố Mẹ, Ông Bà)
+      if (root.father_id && map[root.father_id]) {
+          const father = map[root.father_id];
+          father.relation = 'Bố';
+          father.generation = -1;
           
-          {/* LỊCH */}
-          <View style={[styles.calendarContainer, { borderColor: gridBorderColor }]}>
-            <View style={styles.monthNav}>
-              <TouchableOpacity onPress={() => setCurrentMonth(subMonths(currentMonth, 1))}><Ionicons name="chevron-back" size={24} color={colors.text} /></TouchableOpacity>
-              <Text style={[styles.monthTitle, {color: colors.text}]}>Tháng {format(currentMonth, 'MM yyyy')}</Text>
-              <TouchableOpacity onPress={() => setCurrentMonth(addMonths(currentMonth, 1))}><Ionicons name="chevron-forward" size={24} color={colors.text} /></TouchableOpacity>
-            </View>
-            
-            <View style={styles.weekHeaderRow}>
-              {weekDays.map((day, index) => {
-                const isSunday = index === 6;
-                // Màu nền nhẹ hơn primary một chút cho tiêu đề
-                const normalDayBg = theme === 'dark' ? colors.primary + '15' : colors.primary + '15'; 
-                const normalDayBorder = theme === 'dark' ? colors.primary + '40' : colors.primary + '40'; 
-                const normalDayText = theme === 'dark' ? colors.primary : colors.primary; 
-                
-                const sundayBg = theme === 'dark' ? colors.error + '15' : colors.error + '15';
-                const sundayBorder = theme === 'dark' ? colors.error + '40' : colors.error + '40';
+          if (father.father_id && map[father.father_id]) {
+              map[father.father_id].relation = 'Ông Nội';
+              map[father.father_id].generation = -2;
+          }
+          if (father.mother_id && map[father.mother_id]) {
+              map[father.mother_id].relation = 'Bà Nội';
+              map[father.mother_id].generation = -2;
+          }
+          // Anh em của bố (Chú/Bác/Cô)
+          members.forEach(m => {
+              if (m.father_id === father.father_id && m.id !== father.id && m.id !== root.mother_id) {
+                   m.relation = m.gender === 'Nam' ? 'Chú/Bác' : 'Cô';
+                   m.generation = -1;
+              }
+          });
+      }
 
-                return (
-                  <View key={index} style={[styles.headerCell, {
-                        backgroundColor: isSunday ? sundayBg : normalDayBg, 
-                        borderColor: isSunday ? sundayBorder : normalDayBorder, borderWidth: 1, borderRadius: 8, marginHorizontal: '0.3%' 
-                  }]}>
-                    <Text style={[styles.weekText, { color: isSunday ? colors.error : normalDayText }]}>{day}</Text>
-                  </View>
-                );
-              })}
-            </View>
-            
-            <View style={[styles.gridContainer, { borderTopWidth: 0 }]}>
-              {days.map((day, index) => {
-                const dateKey = format(day, 'yyyy-MM-dd');
-                const isCurrentMonth = isSameMonth(day, currentMonth);
-                const lunarInfo = getLunarInfo(day);
-                const manualData = notes[dateKey];
-                const autoType = calculateAutoShift(day);
-                const displayType = manualData?.type || autoType; 
-                const displayLines = manualData?.noteLines || [];
-                const isToday = isSameDay(day, new Date());
-                const isSelected = selectedDate && isSameDay(day, selectedDate);
-                
-                let cellBg = 'transparent';
-                let currentBorderColor = gridBorderColor;
-                let currentBorderWidth = 0.5;
+      if (root.mother_id && map[root.mother_id]) {
+          const mother = map[root.mother_id];
+          mother.relation = 'Mẹ';
+          mother.generation = -1;
 
-                if (isSelected) {
-                    cellBg = colors.primary + '20'; currentBorderColor = colors.primary; currentBorderWidth = 2;
-                } else if (isToday) {
-                    // Màu vàng nhẹ cho ngày hiện tại (hardcode nhẹ vì màu này đặc thù)
-                    cellBg = theme === 'dark' ? '#FEF08A20' : '#FEF9C3'; 
-                    currentBorderColor = '#EAB308'; currentBorderWidth = 1;
-                } else if (displayType === 'nghi') {
-                    cellBg = theme === 'dark' ? '#FFFFFF05' : '#F1F5F9';
-                }
+          if (mother.father_id && map[mother.father_id]) {
+              map[mother.father_id].relation = 'Ông Ngoại';
+              map[mother.father_id].generation = -2;
+          }
+          if (mother.mother_id && map[mother.mother_id]) {
+              map[mother.mother_id].relation = 'Bà Ngoại';
+              map[mother.mother_id].generation = -2;
+          }
+           // Anh em của mẹ (Cậu/Dì)
+           members.forEach(m => {
+            if (m.father_id === mother.father_id && m.id !== mother.id && m.id !== root.father_id) {
+                 m.relation = m.gender === 'Nam' ? 'Cậu' : 'Dì';
+                 m.generation = -1;
+            }
+        });
+      }
 
-                return (
-                  <TouchableOpacity key={index} style={[styles.cell, { backgroundColor: cellBg, borderColor: currentBorderColor, borderWidth: currentBorderWidth }]} onPress={() => handlePressDay(day)}>
-                    <View style={styles.cellHeader}>
-                      <Text style={[styles.solarText, { color: isCurrentMonth ? colors.text : colors.subText, fontWeight: isToday ? 'bold' : 'normal' }]}>{format(day, 'd')}</Text>
-                      <Text style={[styles.lunarText, {color: colors.subText}, lunarInfo.isFirstDay && {color: colors.error, fontWeight: 'bold'}]}>{lunarInfo.text}</Text>
-                    </View>
-                    <View style={{marginTop: 4, flex: 1}}> 
-                      {displayLines.slice(0, 3).map((line, i) => (<Text key={i} numberOfLines={1} style={{fontSize: 8.5, color: colors.text, marginBottom: 1, fontWeight: '500'}}>{line}</Text>))}
-                      {displayLines.length > 3 && <Text style={{fontSize: 8, color: colors.subText}}>...</Text>}
-                    </View>
-                    {/* @ts-ignore */}
-                    {displayType && <View style={styles.bottomRightIcon}>{renderIcon(displayType, 12)}</View>}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* BẢNG TỔNG HỢP */}
-          <View style={styles.separator} />
-          <View style={styles.toolbar}>
-             <Text style={[styles.toolbarTitle, {color: colors.text}]}>Tổng Hợp Ghi Chú</Text>
-             <View style={[styles.switchContainer, {backgroundColor: colors.iconBg}]}>
-                <TouchableOpacity style={[styles.switchBtn, summaryMode === 'date' && {backgroundColor: colors.card}]} onPress={() => setSummaryMode('date')}>
-                  <Text style={{color: summaryMode === 'date' ? colors.primary : colors.subText, fontWeight:'bold'}}>Theo Ngày</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.switchBtn, summaryMode === 'content' && {backgroundColor: colors.card}]} onPress={() => setSummaryMode('content')}>
-                  <Text style={{color: summaryMode === 'content' ? colors.primary : colors.subText, fontWeight:'bold'}}>Theo Tên</Text>
-                </TouchableOpacity>
-             </View>
-          </View>
-
-          <View style={styles.summaryTable}>
-            {summaryMode === 'date' ? (
-              summaryListDate.length === 0 ? <Text style={{textAlign: 'center', color: colors.subText, fontStyle: 'italic', marginTop: 20}}>Tháng này trống.</Text> :
-              summaryListDate.map((item, idx) => (
-                <View key={idx} style={[styles.glassRow, {backgroundColor: colors.card, borderColor: colors.border}]}>
-                   <View style={[styles.dateBadge, {backgroundColor: colors.iconBg}]}>
-                      <Text style={{fontSize: 16, fontWeight: 'bold', color: colors.primary}}>{format(item.date, 'dd')}</Text>
-                      <Text style={{fontSize: 10, color: colors.subText}}>{format(item.date, 'EEE')}</Text>
-                   </View>
-                   <View style={{flex: 1}}>{item.noteLines.map((l,i) => <Text key={i} style={{color: colors.text}}>• {l}</Text>)}</View>
-                </View>
-              ))
-            ) : (
-              summaryListContent.length === 0 ? <Text style={{textAlign: 'center', color: colors.subText, fontStyle: 'italic', marginTop: 20}}>Không có dữ liệu.</Text> :
-              summaryListContent.map((item, idx) => (
-                <View key={idx} style={[styles.compactRow, {backgroundColor: colors.card, borderColor: colors.border}]}>
-                   <Text style={{fontSize: 14, color: colors.text, lineHeight: 20}}>
-                      <Text style={{fontWeight:'bold', color: colors.primary}}>{item.name}: </Text>
-                      {item.days}
-                   </Text>
-                </View>
-              ))
-            )}
-          </View>
-        </ScrollView>
-
-        <Modal visible={modalVisible} animationType="fade" transparent>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={[styles.modalContent, {backgroundColor: colors.card, borderColor: colors.border}]}>
-              <View style={styles.modalHeader}>
-                <Text style={{fontSize: 18, fontWeight: 'bold', color: colors.text}}>{selectedDate ? format(selectedDate, 'dd/MM/yyyy') : ''}</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
-              </View>
+      // 2. Tìm xuôi xuống (Con, Cháu)
+      members.forEach(m => {
+          if (m.father_id === rootId || m.mother_id === rootId) {
+              m.relation = 'Con';
+              m.generation = 1;
               
-              <View style={{alignItems: 'center', marginBottom: 20}}>
-                 {tempType ? (
-                    <View style={[styles.singleShiftView, {backgroundColor: colors.iconBg, borderColor: colors.primary}]}>
-                        {tempType === 'ngay' && (
-                           <>
-                             <Ionicons name="sunny" size={24} color={theme === 'dark' ? "#FDB813" : "#F59E0B"} />
-                             <Text style={[styles.shiftText, {color: colors.text}]}>CA NGÀY</Text>
-                           </>
-                        )}
-                        {tempType === 'dem' && (
-                           <>
-                             <Ionicons name="moon" size={24} color={theme === 'dark' ? "#2DD4BF" : "#6366F1"} />
-                             <Text style={[styles.shiftText, {color: colors.text}]}>CA ĐÊM</Text>
-                           </>
-                        )}
-                        {tempType === 'nghi' && (
-                           <>
-                             <Ionicons name="cafe" size={24} color={theme === 'dark' ? "#FDA4AF" : "#78350F"} />
-                             <Text style={[styles.shiftText, {color: colors.text}]}>NGÀY NGHỈ</Text>
-                           </>
-                        )}
-                    </View>
-                 ) : (
-                    <Text style={{color: colors.subText, fontStyle: 'italic'}}>(Chưa thiết lập ngày bắt đầu trong Cài đặt)</Text>
+              // Cháu
+              members.forEach(grandChild => {
+                  if (grandChild.father_id === m.id || grandChild.mother_id === m.id) {
+                      grandChild.relation = 'Cháu';
+                      grandChild.generation = 2;
+                  }
+              });
+          }
+      });
+
+      // 3. Tìm ngang hàng (Anh chị em, Vợ chồng)
+      if (root.wife_husband_id && map[root.wife_husband_id]) {
+          map[root.wife_husband_id].relation = root.gender === 'Nam' ? 'Vợ' : 'Chồng';
+          map[root.wife_husband_id].generation = 0;
+      }
+      
+      members.forEach(m => {
+          if (m.id !== root.id && m.father_id && m.father_id === root.father_id) {
+              m.relation = 'Anh/Chị/Em';
+              m.generation = 0;
+          }
+      });
+
+      return Object.values(map);
+  };
+
+
+  // --- 2. LOGIC XÂY CÂY ---
+  const fetchAndBuildTree = async () => {
+    setLoading(true);
+    const { data: allMembers, error } = await supabase.from('members').select('*');
+    if (error) { setLoading(false); return; }
+    if (!allMembers) return;
+
+    // Tính toán quan hệ trước khi xây cây
+    const processedMembers = calculateRelations(allMembers, rootPersonId);
+
+    const memberMap: Record<string, Member> = {};
+    processedMembers.forEach((m) => { memberMap[m.id] = { ...m, children: [] }; });
+    const rootMembers: Member[] = [];
+
+    processedMembers.forEach((m) => {
+      const current = memberMap[m.id];
+      if (m.wife_husband_id && memberMap[m.wife_husband_id]) current.spouse = memberMap[m.wife_husband_id];
+      if (m.father_id && memberMap[m.father_id]) memberMap[m.father_id].children?.push(current);
+      else if (m.mother_id && memberMap[m.mother_id]) memberMap[m.mother_id].children?.push(current);
+      else if (!m.father_id && !m.mother_id) {
+         if (m.wife_husband_id && memberMap[m.wife_husband_id]) {
+            const spouse = memberMap[m.wife_husband_id];
+            if (spouse.father_id || spouse.mother_id) return; 
+            if (m.gender === 'Nam' || (m.gender === spouse.gender && m.id < spouse.id)) rootMembers.push(current);
+         } else { rootMembers.push(current); }
+      }
+    });
+    setTreeData(rootMembers);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAndBuildTree(); }, [rootPersonId]); // Chạy lại khi đổi người Gốc
+
+  // --- CÁC HÀM XỬ LÝ ---
+  const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+    if (Platform.OS === 'web') { if (window.confirm(`${title}\n\n${message}`)) onConfirm(); }
+    else { Alert.alert(title, message, [{ text: "Hủy", style: "cancel" }, { text: "Đồng ý", style: "destructive", onPress: onConfirm }]); }
+  };
+  const finalizeAction = (msg: string) => { Alert.alert('Thành công', msg); setModalType(null); setSelectedMember(null); fetchAndBuildTree(); };
+  
+  const handleDelete = () => {
+    if (!selectedMember) return;
+    confirmAction("Xóa", `Xóa ${selectedMember.full_name}?`, async () => { await supabase.from('members').delete().eq('id', selectedMember.id); finalizeAction('Đã xóa!'); });
+  };
+  const handleDivorce = () => {
+    if (!selectedMember || !selectedMember.wife_husband_id) return;
+    confirmAction("Gỡ quan hệ", "Gỡ vợ chồng?", async () => {
+        const sId = selectedMember.wife_husband_id; await supabase.from('members').update({ wife_husband_id: null }).eq('id', selectedMember.id); await supabase.from('members').update({ wife_husband_id: null }).eq('id', sId); finalizeAction("Đã gỡ.");
+    });
+  };
+  const handleSave = async () => {
+    if (!formData.fullName.trim()) return Alert.alert('Lỗi', 'Cần nhập tên');
+    if (modalType === 'EDIT' && selectedMember) { await supabase.from('members').update({ full_name: formData.fullName, gender: formData.gender, birth_date: formData.birthDate || null, bio: formData.bio }).eq('id', selectedMember.id); finalizeAction('Cập nhật!'); }
+    else if (modalType === 'ADD_CHILD' && selectedMember) {
+        const fId = selectedMember.gender === 'Nam' ? selectedMember.id : selectedMember.wife_husband_id;
+        const mId = selectedMember.gender === 'Nữ' ? selectedMember.id : selectedMember.wife_husband_id;
+        await supabase.from('members').insert([{ full_name: formData.fullName, gender: formData.gender, birth_date: formData.birthDate || null, bio: formData.bio, father_id: fId, mother_id: mId }]); finalizeAction('Đã thêm con!');
+    } else if (modalType === 'ADD_SPOUSE' && selectedMember) {
+        const { data: nS } = await supabase.from('members').insert([{ full_name: formData.fullName, gender: formData.gender, birth_date: formData.birthDate || null, bio: formData.bio, wife_husband_id: selectedMember.id }]).select().single();
+        if (nS) { await supabase.from('members').update({ wife_husband_id: nS.id }).eq('id', selectedMember.id); finalizeAction('Kết duyên!'); }
+    }
+  };
+
+  const handleSetRoot = () => {
+      if(selectedMember) {
+          setRootPersonId(selectedMember.id);
+          Alert.alert("Đã đặt làm Gốc", `Cây gia phả sẽ hiển thị quan hệ dựa trên góc nhìn của "${selectedMember.full_name}" (Hiển thị 3 đời).`);
+          setModalType(null);
+      }
+  };
+
+  // --- COMPONENT VẼ CÂY ---
+  const TreeNode = ({ node, isFirst, isLast, isRoot }: { node: Member, isFirst?: boolean, isLast?: boolean, isRoot?: boolean }) => {
+    
+    // Logic lọc hiển thị 3 đời:
+    // Nếu có RootPersonId, chỉ hiển thị những người có generation từ -2 đến 2
+    // Hoặc nếu không có generation (người ngoài nhánh) thì có thể ẩn hoặc làm mờ.
+    const shouldShow = !rootPersonId || (node.generation !== undefined && Math.abs(node.generation) <= 2);
+    
+    // Nếu không nằm trong phạm vi 3 đời -> Render null (Ẩn luôn) hoặc render mờ
+    // Ở đây Tèo chọn cách vẫn render cấu trúc nhưng làm mờ để giữ layout cây không bị vỡ
+    const opacity = shouldShow ? 1 : 0.3;
+
+    const allChildren = [...(node.children || [])];
+    if (node.spouse && node.spouse.children) {
+        node.spouse.children.forEach(sc => { if(!allChildren.find(c => c.id === sc.id)) allChildren.push(sc); });
+    }
+
+    return (
+      <View style={[styles.nodeWrapper, {opacity}]}>
+        {!isRoot && (
+           <View style={styles.lineAboveContainer}>
+             <View style={[styles.lineHorizontal, isFirst && styles.lineHiddenLeft, isLast && styles.lineHiddenRight]} />
+             <View style={styles.lineVerticalTop} />
+           </View>
+        )}
+
+        <View style={styles.coupleRow}>
+          {node.spouse && <View style={styles.ghostSpouse} />}
+          
+          <View style={styles.mainMemberContainer}>
+            <TouchableOpacity 
+              style={[
+                  styles.memberCard, 
+                  { backgroundColor: node.gender === 'Nam' ? '#E0F2FE' : '#FCE7F3', borderColor: node.gender === 'Nam' ? '#7DD3FC' : '#FBCFE8' },
+                  node.id === rootPersonId && { borderWidth: 2, borderColor: '#EF4444' } // Viền đỏ nếu là Gốc
+              ]} 
+              onPress={() => { setSelectedMember(node); setModalType('DETAIL'); }}
+            >
+              <View>
+                 <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+                    <Ionicons name={node.gender === 'Nam' ? 'man' : 'woman'} size={12} color={node.gender === 'Nam' ? '#0369A1' : '#BE185D'} />
+                    <Text style={styles.nameText} numberOfLines={1}>{node.full_name}</Text>
+                 </View>
+                 {/* HIỂN THỊ QUAN HỆ */}
+                 {node.relation && (
+                     <Text style={{fontSize: 9, color: '#DC2626', fontWeight: 'bold', textAlign: 'center'}}>{node.relation}</Text>
                  )}
               </View>
+            </TouchableOpacity>
+            {allChildren.length > 0 && <View style={styles.lineVerticalBottom} />}
+          </View>
 
-              <ScrollView style={{maxHeight: 200}}>
-                {tempNotesList.map((note, index) => (
-                  <View key={index} style={[styles.inputRow, { flexDirection: 'row', alignItems: 'center' }]}>
-                    <TextInput 
-                      style={[styles.inputMulti, {backgroundColor: colors.iconBg, color: colors.text, borderColor: colors.border, flex: 1}]} 
-                      placeholder={`Ghi chú ${index + 1}...`} placeholderTextColor={colors.subText}
-                      value={note} onChangeText={(text) => handleChangeNoteLine(text, index)} 
-                    />
-                    <TouchableOpacity onPress={() => handleDeleteNoteLine(index)} style={{marginLeft: 10, padding: 5}}>
-                        <Ionicons name="trash-outline" size={20} color={colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-              <TouchableOpacity style={styles.addMoreBtn} onPress={handleAddNoteLine}><Ionicons name="add-circle-outline" size={20} color={colors.primary} /><Text style={{color: colors.primary, marginLeft: 5}}>Thêm dòng</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, {backgroundColor: colors.primary}]} onPress={handleSave}><Text style={{color: 'white', fontWeight: 'bold'}}>Lưu Ghi Chú</Text></TouchableOpacity>
+          {node.spouse && (
+            <View style={styles.spouseContainer}>
+               <View style={styles.connector} />
+               <TouchableOpacity 
+                 style={[styles.memberCard, { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB' }]} 
+                 onPress={() => { setSelectedMember(node.spouse!); setModalType('DETAIL'); }}
+               >
+                 <View>
+                    <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center'}}>
+                        <Ionicons name={node.spouse.gender === 'Nam' ? 'man' : 'woman'} size={12} color="gray" />
+                        <Text style={[styles.nameText, {color: 'gray'}]} numberOfLines={1}>{node.spouse.full_name}</Text>
+                    </View>
+                    {node.spouse.relation && (
+                         <Text style={{fontSize: 9, color: '#DC2626', fontWeight: 'bold', textAlign: 'center'}}>{node.spouse.relation}</Text>
+                     )}
+                 </View>
+               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </SafeAreaView>
-    </LinearGradient>
+          )}
+        </View>
+
+        {allChildren.length > 0 && (
+          <View style={styles.childrenListContainer}>
+            {allChildren.map((child, index) => (
+              <TreeNode key={child.id} node={child} isFirst={index === 0} isLast={index === (allChildren.length - 1)} />
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Gia Phả Chính Thống</Text>
+      <Text style={{textAlign: 'center', color: '#666', fontSize: 12, marginBottom: 10}}>
+          {rootPersonId ? 'Đang xem quan hệ với: Người được chọn (Viền đỏ)' : 'Chọn một người -> "Đặt làm Gốc" để xem quan hệ'}
+      </Text>
+
+      {loading ? ( <ActivityIndicator size="large" style={{marginTop: 50}} /> ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent} horizontal>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+             {treeData.length === 0 ? (
+                <TouchableOpacity onPress={() => { setModalType('ADD_CHILD'); setSelectedMember({id: 'root'} as any); }} style={styles.rootBtn}><Text style={{color:'white'}}>+ Thêm Người Đầu Tiên</Text></TouchableOpacity>
+             ) : ( treeData.map((root) => <TreeNode key={root.id} node={root} isRoot={true} />) )}
+          </ScrollView>
+        </ScrollView>
+      )}
+
+      <Modal visible={modalType !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            {modalType === 'DETAIL' && selectedMember ? (
+              <>
+                <View style={styles.detailHeader}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>{selectedMember.full_name}</Text>
+                    <View style={{flexDirection: 'row'}}>
+                        <TouchableOpacity onPress={handleDelete} style={{marginRight: 15}}><Ionicons name="trash-outline" size={24} color="#EF4444" /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => { setFormData({fullName: selectedMember.full_name, gender: selectedMember.gender, birthDate: selectedMember.birth_date || '', bio: selectedMember.bio || ''}); setModalType('EDIT'); }}><Ionicons name="pencil" size={24} color={colors.primary} /></TouchableOpacity>
+                    </View>
+                </View>
+                <View style={styles.infoBox}>
+                    <Text style={{color: colors.text}}>🎂 {selectedMember.birth_date || '?'}</Text>
+                    <Text style={{color: colors.text}}>⚥ {selectedMember.gender}</Text>
+                    {selectedMember.relation && <Text style={{color: '#DC2626', fontWeight: 'bold', marginTop: 5}}>Quan hệ: {selectedMember.relation}</Text>}
+                </View>
+
+                {/* NÚT ĐẶT LÀM GỐC */}
+                <TouchableOpacity style={[styles.menuItem, {backgroundColor: '#FEF3C7', marginBottom: 15, borderWidth: 1, borderColor: '#F59E0B'}]} onPress={handleSetRoot}>
+                    <Text style={{color: '#D97706', fontWeight: 'bold'}}>★ Đặt làm Gốc (Xem quan hệ)</Text>
+                </TouchableOpacity>
+
+                <View style={styles.menuGrid}>
+                  <TouchableOpacity style={[styles.menuItem, {backgroundColor: '#DCFCE7'}]} onPress={() => { setFormData({fullName:'', gender:'Nam', birthDate:'', bio:''}); setModalType('ADD_CHILD'); }}><Text style={{color: '#16A34A'}}>+ Con</Text></TouchableOpacity>
+                  {!selectedMember.wife_husband_id ? (
+                    <TouchableOpacity style={[styles.menuItem, {backgroundColor: '#FCE7F3'}]} onPress={() => { setFormData({fullName:'', gender: selectedMember.gender === 'Nam' ? 'Nữ' : 'Nam', birthDate:'', bio:''}); setModalType('ADD_SPOUSE'); }}><Text style={{color: '#DB2777'}}>+ Vợ/Chồng</Text></TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.menuItem, {borderWidth: 1, borderColor: '#DB2777'}]} onPress={handleDivorce}><Text style={{color: '#DB2777', fontSize: 10}}>Ly hôn</Text></TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity style={{alignItems:'center', padding:10}} onPress={() => setModalType(null)}><Text style={{color: 'gray'}}>Đóng</Text></TouchableOpacity>
+              </>
+            ) : (
+               <>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Thông Tin</Text>
+                <TextInput style={[styles.input, {color: colors.text, borderColor: colors.border}]} placeholder="Họ tên" value={formData.fullName} onChangeText={(t)=>setFormData({...formData, fullName: t})} />
+                <View style={{flexDirection:'row', marginBottom:15}}>
+                    <TextInput style={[styles.input, {flex:1, marginRight:10, color:colors.text, borderColor:colors.border}]} placeholder="Ngày sinh" value={formData.birthDate} onChangeText={(t)=>setFormData({...formData, birthDate: t})} />
+                    <TouchableOpacity onPress={()=>setFormData({...formData, gender:'Nam'})} style={[styles.genderBtn, formData.gender==='Nam' && {backgroundColor:'#E0F2FE'}]}><Text>Nam</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={()=>setFormData({...formData, gender:'Nữ'})} style={[styles.genderBtn, formData.gender==='Nữ' && {backgroundColor:'#FCE7F3'}]}><Text>Nữ</Text></TouchableOpacity>
+                </View>
+                <TextInput style={[styles.input, {height:60}]} placeholder="Ghi chú" multiline value={formData.bio} onChangeText={(t)=>setFormData({...formData, bio: t})} />
+                <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={{color:'white', fontWeight:'bold'}}>Lưu</Text></TouchableOpacity>
+                <TouchableOpacity style={{alignItems:'center', marginTop:10}} onPress={() => setModalType(null)}><Text style={{color: 'gray'}}>Hủy</Text></TouchableOpacity>
+               </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  calendarContainer: { marginHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 0, paddingBottom: 5 },
-  monthNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-  monthTitle: { fontSize: 20, fontWeight: 'bold' },
-  // Layout chuẩn: paddingHorizontal 2 để khớp margin 0.3%
-  weekHeaderRow: { flexDirection: 'row', marginBottom: 10, paddingHorizontal: 2 },
-  // Layout chuẩn: width 13.5%
-  headerCell: { width: '13.5%', marginHorizontal: '0.3%', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  weekText: { fontWeight: 'bold', fontSize: 13 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 2 },
-  cell: { width: '13.5%', height: 95, margin: '0.3%', borderRadius: 14, padding: 4, position: 'relative' },
-  cellHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  solarText: { fontSize: 15, fontWeight: 'bold' },
-  lunarText: { fontSize: 9, marginTop: 2 },
-  bottomRightIcon: { position: 'absolute', bottom: 4, right: 4 },
-  separator: { height: 20 },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
-  toolbarTitle: { fontSize: 18, fontWeight: 'bold' },
-  switchContainer: { flexDirection: 'row', borderRadius: 12, padding: 3 },
-  switchBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
-  summaryTable: { paddingHorizontal: 15 },
-  glassRow: { flexDirection: 'row', padding: 12, marginBottom: 10, borderRadius: 16, alignItems: 'center', borderWidth: 1 },
-  compactRow: { padding: 10, marginBottom: 5, borderRadius: 8, borderWidth: 1 },
-  dateBadge: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalContent: { width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, borderWidth: 1 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  singleShiftView: { width: '40%', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  shiftText: { marginTop: 5, fontWeight: 'bold', fontSize: 13 },
-  inputRow: { marginBottom: 10 },
-  inputMulti: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14 },
-  addMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 12, marginTop: 5 },
-  saveBtn: { padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 20 },
+  container: { flex: 1 },
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginTop: 50, marginBottom: 5 },
+  scrollContent: { padding: 40, alignItems: 'flex-start' },
+  nodeWrapper: { alignItems: 'center' },
+  coupleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' },
+  mainMemberContainer: { alignItems: 'center', width: CARD_WIDTH, zIndex: 10 },
+  spouseContainer: { flexDirection: 'row', alignItems: 'center', height: CARD_HEIGHT },
+  connector: { width: SPACING, height: 2, backgroundColor: '#9CA3AF' },
+  ghostSpouse: { width: CARD_WIDTH + SPACING, height: CARD_HEIGHT },
+  memberCard: { width: CARD_WIDTH, height: CARD_HEIGHT, borderRadius: 6, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white', paddingHorizontal: 4 },
+  nameText: { fontWeight: 'bold', fontSize: 11, marginLeft: 4, flex: 1, textAlign: 'center' },
+  lineVerticalBottom: { width: 2, height: 25, backgroundColor: '#9CA3AF' },
+  lineAboveContainer: { height: 20, width: '100%', alignItems: 'center', position: 'relative' },
+  lineVerticalTop: { width: 2, height: '100%', backgroundColor: '#9CA3AF' },
+  lineHorizontal: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: '#9CA3AF' },
+  lineHiddenLeft: { left: '50%' },
+  lineHiddenRight: { right: '50%' },
+  childrenListContainer: { flexDirection: 'row', alignItems: 'flex-start' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalContent: { padding: 20, borderRadius: 15, maxWidth: 350, width: '100%', alignSelf: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  infoBox: { backgroundColor: '#f3f4f6', padding: 10, borderRadius: 8, marginBottom: 15 },
+  menuGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  menuItem: { flex: 1, padding: 10, borderRadius: 8, alignItems: 'center', marginHorizontal: 5 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
+  genderBtn: { padding: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginLeft: 5 },
+  saveBtn: { backgroundColor: '#4F46E5', padding: 12, borderRadius: 8, alignItems: 'center' },
+  rootBtn: { backgroundColor: '#4F46E5', padding: 15, borderRadius: 10 }
 });
