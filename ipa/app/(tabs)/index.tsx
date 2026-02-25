@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   connector: { width: SPACING, height: 2, backgroundColor: '#9CA3AF' },
   ghostSpouse: { width: CARD_WIDTH + SPACING, height: CARD_HEIGHT },
   memberCard: { width: CARD_WIDTH, height: CARD_HEIGHT, borderRadius: 6, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white', paddingHorizontal: 4 },
-  nameText: { fontWeight: 'bold', fontSize: 11, marginLeft: 4, flex: 1, textAlign: 'center' },
+  nameText: { fontWeight: 'bold', fontSize: 11, marginLeft: 4, flexShrink: 1, textAlign: 'center', maxWidth: 75 },
   lineVerticalBottom: { width: 2, height: 25, backgroundColor: '#9CA3AF' },
   lineAboveContainer: { height: 20, width: '100%', alignItems: 'center', position: 'relative' },
   lineVerticalTop: { width: 2, height: '100%', backgroundColor: '#9CA3AF' },

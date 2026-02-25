@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "Ghi chú",
-    "slug": "ghi-chu",
+    "name": "Gia-Phả",
+    "slug": "ghia-pha",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "ghi-chu",
+    "scheme": "gia-pha",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "Ghichu.duongnt.io.vn",
-      "appleTeamId": "GhiChu",
+      "bundleIdentifier": "Giapha.duongnt.io.vn",
+      "appleTeamId": "GiaPha",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCalendarsUsageDescription": "App cần quyền truy cập Lịch để nhắc nhở ca làm việc.",
