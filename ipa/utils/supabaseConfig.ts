@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
-const supabaseUrl = 'https://fkrhyhuactxbmvherqhg.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrcmh5aHVhY3R4Ym12aGVycWhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMDE3MTYsImV4cCI6MjA4Njg3NzcxNn0.Ug2PJ04Y0CRHGBWYLPk6VAw_vem45J5qMzmAOdDeD6E';
+const supabaseUrl = 'https://vgoymfsyzdjgvhiddxum.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnb3ltZnN5emRqZ3ZoaWRkeHVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5OTkzMzYsImV4cCI6MjA4NzU3NTMzNn0.dTNlfE759v6unNwUlJc_oN1DKDfroh6KAxm75KiuF0o';
 
 // Tèo làm cái kho chứa thông minh: Nếu là Web/Server thì không gọi AsyncStorage để tránh lỗi
 const ExpoStorage = {
