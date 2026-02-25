@@ -1,4 +1,4 @@
-name: Build Unsigned IPA to Releases
+name: Cài 
 
 on:
   workflow_dispatch:
